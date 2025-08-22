@@ -53,11 +53,17 @@ app.get('/plugin.json', (req, res) => {
 // Plugin info endpoint
 app.get('/plugin.json', (req, res) => {
   try {
+    console.log('📄 Plugin info endpoint called');
+    console.log('🔍 Current working directory:', process.cwd());
+    console.log('📁 Files in current directory:', require('fs').readdirSync('.'));
+    
     const pluginInfo = require('./plugin.json');
+    console.log('✅ Plugin info loaded successfully:', pluginInfo.id, pluginInfo.name);
     res.json(pluginInfo);
   } catch (error) {
     console.error('❌ Error loading plugin.json:', error);
-    res.status(404).json({ error: 'Plugin info not found' });
+    console.error('📁 Available files:', require('fs').readdirSync('.'));
+    res.status(404).json({ error: 'Plugin info not found', details: error.message });
   }
 });
 
