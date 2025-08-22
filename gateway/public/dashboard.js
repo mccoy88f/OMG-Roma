@@ -15,7 +15,11 @@ async function loadDashboard() {
             manifest: manifestResponse
         };
 
-        updateManifestUrl(manifestResponse.manifestUrl);
+        updateManifestUrl(
+            manifestResponse.manifestUrl, 
+            manifestResponse.configHash, 
+            manifestResponse.isPersonalized
+        );
         renderDashboard();
 
     } catch (error) {
@@ -24,9 +28,28 @@ async function loadDashboard() {
     }
 }
 
-function updateManifestUrl(url) {
+function updateManifestUrl(url, configHash = null, isPersonalized = false) {
     const manifestUrlElement = document.getElementById('manifestUrl');
     manifestUrlElement.textContent = url || 'http://localhost:3100/manifest.json';
+    
+    // Show configuration hash info if available
+    if (configHash && isPersonalized) {
+        const configInfo = document.createElement('div');
+        configInfo.className = 'config-info';
+        configInfo.innerHTML = `
+            <small style="color: #718096; margin-top: 5px; display: block;">
+                🔧 Manifest personalizzato (config: ${configHash})
+            </small>
+        `;
+        
+        // Remove existing config info if any
+        const existingInfo = manifestUrlElement.parentNode.querySelector('.config-info');
+        if (existingInfo) {
+            existingInfo.remove();
+        }
+        
+        manifestUrlElement.parentNode.appendChild(configInfo);
+    }
 }
 
 function renderDashboard() {
@@ -216,7 +239,9 @@ function copyManifestUrl() {
 }
 
 function openStremio() {
-    window.open('stremio://');
+    // Open Stremio addon in browser instead of desktop app
+    const manifestUrl = document.getElementById('manifestUrl').textContent;
+    window.open(manifestUrl, '_blank');
 }
 
 function closeModal() {

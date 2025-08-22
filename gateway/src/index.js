@@ -43,7 +43,14 @@ app.get('/health', (req, res) => {
 // Stremio manifest
 app.get('/manifest.json', async (req, res) => {
   try {
-    const manifest = await stremioAdapter.generateManifest();
+    // Check if configuration hash is provided
+    const { config } = req.query;
+    
+    if (config) {
+      console.log(`🔧 Generating personalized manifest for config: ${config}`);
+    }
+    
+    const manifest = await stremioAdapter.generateManifest(config);
     res.json(manifest);
   } catch (error) {
     console.error('❌ Error generating manifest:', error);

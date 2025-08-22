@@ -176,13 +176,23 @@ class WebUI {
         const StremioAdapter = require('./stremio-adapter');
         const stremioAdapter = new StremioAdapter(this.pluginManager);
         
-        const manifest = await stremioAdapter.generateManifest();
+        // Generate configuration hash for personalized manifest
+        const configHash = stremioAdapter.generateConfigHash();
+        const manifest = await stremioAdapter.generateManifest(configHash);
+        
+        // Generate personalized manifest URL
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const manifestUrl = configHash 
+          ? `${baseUrl}/manifest.json?config=${configHash}`
+          : `${baseUrl}/manifest.json`;
         
         res.json({
           success: true,
           manifest,
           catalogCount: manifest.catalogs.length,
-          manifestUrl: `${req.protocol}://${req.get('host')}/manifest.json`
+          manifestUrl,
+          configHash,
+          isPersonalized: !!configHash
         });
 
       } catch (error) {

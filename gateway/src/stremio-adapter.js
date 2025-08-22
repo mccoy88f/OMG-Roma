@@ -3,7 +3,7 @@ class StremioAdapter {
     this.pluginManager = pluginManager;
   }
 
-  async generateManifest() {
+  async generateManifest(configHash = null) {
     const plugins = this.pluginManager.getAllPlugins();
     const catalogs = [];
     
@@ -46,8 +46,12 @@ class StremioAdapter {
       }
     }
 
+    // Generate unique manifest ID based on configuration
+    const baseId = "omg.roma.addon";
+    const manifestId = configHash ? `${baseId}.${configHash}` : baseId;
+
     const manifest = {
-      id: "omg.roma.addon",
+      id: manifestId,
       version: "1.0.0",
       name: "OMG-Roma",
       description: "OMG-Roma - Addon modulare per streaming multi-piattaforma",
@@ -86,6 +90,70 @@ class StremioAdapter {
     };
 
     return manifest;
+  }
+
+  // Generate configuration hash for personalized manifests
+  generateConfigHash() {
+    try {
+      const plugins = this.pluginManager.getAllPlugins();
+      const configData = {};
+      
+      // Collect configuration data from all plugins
+      for (const plugin of plugins) {
+        const pluginConfig = {
+          id: plugin.config.id,
+          version: plugin.config.version,
+          // Include plugin-specific configuration
+          config: this.extractPluginConfig(plugin)
+        };
+        configData[plugin.config.id] = pluginConfig;
+      }
+      
+      // Create a hash from configuration data
+      const configString = JSON.stringify(configData, Object.keys(configData).sort());
+      const hash = this.simpleHash(configString);
+      
+      return hash;
+    } catch (error) {
+      console.error('❌ Error generating config hash:', error);
+      return null;
+    }
+  }
+
+  // Extract relevant configuration from plugin
+  extractPluginConfig(plugin) {
+    try {
+      const config = {};
+      
+      // Extract YouTube-specific configuration
+      if (plugin.config.id === 'youtube') {
+        const youtubeConfig = plugin.config;
+        config.search_mode = youtubeConfig.search_mode;
+        config.followed_channels = youtubeConfig.followed_channels || [];
+        config.api_key_configured = !!youtubeConfig.api_key;
+      }
+      
+      // Add more plugin-specific configurations here
+      
+      return config;
+    } catch (error) {
+      console.error('❌ Error extracting plugin config:', error);
+      return {};
+    }
+  }
+
+  // Simple hash function for configuration
+  simpleHash(str) {
+    let hash = 0;
+    if (str.length === 0) return hash.toString();
+    
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return Math.abs(hash).toString(36); // Convert to base36 for shorter strings
   }
 
   async handleCatalogRequest(catalogId, extraParams) {
