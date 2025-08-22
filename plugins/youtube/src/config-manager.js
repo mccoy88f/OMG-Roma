@@ -75,15 +75,18 @@ class ConfigManager {
   }
 
   set(key, value) {
+    // Convert value types if needed
+    const convertedValue = this.convertValue(key, value);
+    
     // Validate value based on schema
-    const isValid = this.validateValue(key, value);
+    const isValid = this.validateValue(key, convertedValue);
     
     if (!isValid) {
-      throw new Error(`Invalid value for ${key}: ${value}`);
+      throw new Error(`Invalid value for ${key}: ${convertedValue}`);
     }
     
-    this.config[key] = value;
-    console.log(`⚙️  Config updated: ${key} = ${JSON.stringify(value)}`);
+    this.config[key] = convertedValue;
+    console.log(`⚙️  Config updated: ${key} = ${JSON.stringify(convertedValue)}`);
   }
 
   getAll() {
@@ -153,6 +156,36 @@ class ConfigManager {
     }
 
     console.log('✅ Configuration validated');
+  }
+
+  convertValue(key, value) {
+    switch (key) {
+      case 'video_limit':
+        // Convert to number and ensure it's within valid range
+        const numValue = parseInt(value, 10);
+        if (isNaN(numValue)) {
+          throw new Error(`Invalid video_limit: must be a number, got ${value}`);
+        }
+        return Math.max(5, Math.min(50, numValue)); // Clamp to valid range
+        
+      case 'adult_content':
+        // Convert to boolean
+        if (typeof value === 'string') {
+          return value.toLowerCase() === 'true';
+        }
+        return Boolean(value);
+        
+      case 'followed_channels':
+        // Ensure it's an array
+        if (!Array.isArray(value)) {
+          return [value].filter(Boolean); // Convert to array if single value
+        }
+        return value;
+        
+      default:
+        // No conversion needed for other fields
+        return value;
+    }
   }
 
   validateValue(key, value) {
