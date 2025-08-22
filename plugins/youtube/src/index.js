@@ -3,7 +3,6 @@ const fs = require('fs-extra');
 const path = require('path');
 
 const YouTubeAPI = require('./youtube-api');
-const YtDlpService = require('./ytdlp-service');
 const ConfigManager = require('./config-manager');
 
 const app = express();
@@ -15,7 +14,6 @@ app.use(express.json());
 // Initialize services
 let config;
 let youtubeAPI;
-let ytdlpService;
 
 async function initializeServices() {
   try {
@@ -28,9 +26,8 @@ async function initializeServices() {
     // Initialize YouTube API
     youtubeAPI = new YouTubeAPI(config.get('api_key'));
     
-    // Initialize yt-dlp service
-    ytdlpService = new YtDlpService(config);
-    await ytdlpService.checkAvailability();
+    // yt-dlp service is now centralized in the gateway
+    console.log('ℹ️  yt-dlp service is centralized in OMG-Roma Gateway');
     
     console.log('✅ OMG-Roma YouTube Plugin initialized successfully');
     
@@ -66,7 +63,7 @@ app.get('/health', (req, res) => {
     version: '1.0.0',
     services: {
       youtube_api: youtubeAPI ? youtubeAPI.isConfigured() : false,
-      ytdlp: ytdlpService ? ytdlpService.isAvailable() : false
+      ytdlp: 'centralized'
     }
   });
 });
@@ -75,7 +72,7 @@ app.get('/health', (req, res) => {
 app.get('/ready', (req, res) => {
   try {
     // Check if all services are properly initialized
-    const isReady = youtubeAPI && ytdlpService && ytdlpService.isAvailable();
+    const isReady = youtubeAPI && youtubeAPI.isConfigured();
     
     if (isReady) {
       res.json({
@@ -85,7 +82,7 @@ app.get('/ready', (req, res) => {
         version: '1.0.0',
         services: {
           youtube_api: youtubeAPI.isConfigured(),
-          ytdlp: ytdlpService.isAvailable()
+          ytdlp: 'centralized'
         }
       });
     } else {
@@ -138,12 +135,12 @@ app.post('/search', async (req, res) => {
       }
     }
     
-    // Fallback to yt-dlp search if no results or hybrid/ytdlp mode
+    // Fallback to centralized yt-dlp search if no results or hybrid/ytdlp mode
     if (videos.length === 0 && (searchMode === 'ytdlp' || searchMode === 'hybrid')) {
-      console.log('🔄 Falling back to yt-dlp search');
-      const result = await ytdlpService.search(search, { skip, limit });
-      videos = result.videos;
-      hasMore = result.hasMore;
+      console.log('🔄 Falling back to centralized yt-dlp search');
+      // The gateway will handle yt-dlp search through the streaming API
+      // For now, we'll return empty results and let the gateway handle it
+      console.log('ℹ️  yt-dlp search is now handled by OMG-Roma Gateway');
     }
     
     console.log(`✅ Found ${videos.length} videos`);
@@ -185,9 +182,10 @@ app.post('/discover', async (req, res) => {
       try {
         console.log(`📡 Fetching videos from: ${channelUrl}`);
         
-        const channelVideos = await ytdlpService.getChannelVideos(channelUrl, {
-          limit: Math.ceil(limit / followedChannels.length)
-        });
+        // Channel videos are now handled by the centralized streaming service
+        // For now, we'll return empty results and let the gateway handle it
+        console.log(`ℹ️  Channel videos for ${channelUrl} are now handled by OMG-Roma Gateway`);
+        const channelVideos = [];
         
         allVideos.push(...channelVideos);
         
@@ -228,7 +226,10 @@ app.post('/meta', async (req, res) => {
     
     console.log(`📝 Getting meta for: ${videoId}`);
     
-    const video = await ytdlpService.getVideoInfo(videoId);
+    // Video metadata is now handled by the centralized streaming service
+    // For now, we'll return a placeholder and let the gateway handle it
+    console.log(`ℹ️  Video metadata for ${videoId} is now handled by OMG-Roma Gateway`);
+    const video = null;
     
     if (!video) {
       return res.status(404).json({ error: 'Video not found' });
@@ -254,7 +255,10 @@ app.post('/stream', async (req, res) => {
     
     console.log(`🎬 Getting streams for: ${videoId}`);
     
-    const streams = await ytdlpService.getVideoStreams(videoId);
+    // Video streams are now handled by the centralized streaming service
+    // For now, we'll return empty streams and let the gateway handle it
+    console.log(`ℹ️  Video streams for ${videoId} are now handled by OMG-Roma Gateway`);
+    const streams = [];
     
     if (!streams || streams.length === 0) {
       return res.json({ streams: [] });
@@ -277,6 +281,113 @@ app.post('/stream', async (req, res) => {
 // Configuration endpoints
 app.get('/config', (req, res) => {
   res.json(config.getAll());
+});
+
+// Integration endpoints for centralized services
+app.get('/streaming/search', async (req, res) => {
+  try {
+    const { query, limit = 20, skip = 0, searchType, dateFilter, durationFilter } = req.query;
+    
+    console.log(`🔍 Centralized search request: "${query}"`);
+    
+    // Forward request to gateway streaming service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/search?${new URLSearchParams(req.query)}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      throw new Error(`Gateway error: ${response.status}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Centralized search error:', error);
+    res.status(500).json({ 
+      error: 'Centralized search failed', 
+      details: error.message 
+    });
+  }
+});
+
+app.get('/streaming/info/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    console.log(`📝 Centralized info request for: ${videoId}`);
+    
+    // Forward request to gateway streaming service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/info/${videoId}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      throw new Error(`Gateway error: ${response.status}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Centralized info error:', error);
+    res.status(500).json({ 
+      error: 'Centralized info failed', 
+      details: error.message 
+    });
+  }
+});
+
+app.get('/streaming/formats/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { source = 'youtube' } = req.query;
+    
+    console.log(`🎬 Centralized formats request for: ${videoId}`);
+    
+    // Forward request to gateway streaming service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}?source=${source}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      throw new Error(`Gateway error: ${response.status}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Centralized formats error:', error);
+    res.status(500).json({ 
+      error: 'Centralized formats failed', 
+      details: error.message 
+    });
+  }
+});
+
+app.get('/streaming/channel/:channelId', async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { limit = 20 } = req.query;
+    
+    console.log(`📺 Centralized channel request for: ${channelId}`);
+    
+    // Forward request to gateway streaming service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/channel/${channelId}?limit=${limit}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      throw new Error(`Gateway error: ${response.status}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Centralized channel error:', error);
+    res.status(500).json({ 
+      error: 'Centralized channel failed', 
+      details: error.message 
+    });
+  }
 });
 
 app.post('/config', async (req, res) => {

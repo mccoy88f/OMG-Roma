@@ -12,7 +12,11 @@
     "discover": "/discover",
     "meta": "/meta",
     "stream": "/stream",
-    "config": "/config"
+    "config": "/config",
+    "streaming_search": "/streaming/search",
+    "streaming_info": "/streaming/info",
+    "streaming_formats": "/streaming/formats",
+    "streaming_channel": "/streaming/channel"
   },
   
   "stremio": {
