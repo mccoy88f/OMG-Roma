@@ -62,7 +62,24 @@ app.get('/manifest.json', async (req, res) => {
 app.get('/catalog/:type/:catalogId/:extra?.json', async (req, res) => {
   try {
     const { type, catalogId, extra } = req.params;
-    const extraParams = extra ? JSON.parse(decodeURIComponent(extra)) : {};
+    let extraParams = {};
+    
+    if (extra) {
+      try {
+        // Try to parse as JSON first
+        extraParams = JSON.parse(decodeURIComponent(extra));
+      } catch (jsonError) {
+        // If JSON parsing fails, try to parse as query string
+        console.log(`⚠️  JSON parsing failed for extra: ${extra}, trying query string parsing`);
+        try {
+          const queryString = decodeURIComponent(extra);
+          extraParams = parseQueryString(queryString);
+        } catch (queryError) {
+          console.warn(`⚠️  Query string parsing also failed: ${queryError.message}`);
+          extraParams = {};
+        }
+      }
+    }
     
     console.log(`🔍 Catalog request: ${catalogId}`, extraParams);
     

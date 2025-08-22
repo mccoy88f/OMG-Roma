@@ -72,13 +72,13 @@ function renderDashboard() {
                     <input type="checkbox" id="plugin-${plugin.id}" data-plugin-id="${plugin.id}" 
                            ${plugin.manifestEnabled ? 'checked' : ''} class="plugin-checkbox">
                     <label for="plugin-${plugin.id}" class="plugin-label">
-                        <h3>📦 ${plugin.name}</h3>
+            <h3>📦 ${plugin.name}</h3>
                     </label>
                 </div>
-                <div class="status">
-                    <span class="status-indicator status-${plugin.status}"></span>
-                    <span>Status: ${plugin.status}</span>
-                </div>
+            <div class="status">
+                <span class="status-indicator status-${plugin.status}"></span>
+                <span>Status: ${plugin.status}</span>
+            </div>
             </div>
             
             <p><strong>Versione:</strong> ${plugin.version}</p>
