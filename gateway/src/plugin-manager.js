@@ -156,6 +156,10 @@ class PluginManager {
       // Wait for plugins to be ready
       await this.waitForPluginsReady();
       
+      // Additional delay to ensure plugins are fully ready
+      console.log('⏳ Additional delay to ensure plugins are fully ready...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
       console.log(`✅ Discovered ${this.plugins.size} plugins`);
       
     } catch (error) {
