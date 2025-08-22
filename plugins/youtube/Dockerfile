@@ -34,9 +34,12 @@ RUN if [ -f package-lock.json ]; then \
       npm install --only=production --no-audit --no-fund; \
     fi
 
-# Copy application code
+# Copy application code and config
 COPY plugins/youtube/src/ ./src/
 COPY plugins/youtube/plugin.json ./
+
+# Copy default config from repository
+COPY config/youtube.config.json ./config.json
 
 # Create config directory
 RUN mkdir -p /app/config
