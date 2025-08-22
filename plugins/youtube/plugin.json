@@ -1,0 +1,103 @@
+{
+  "id": "youtube",
+  "name": "YouTube",
+  "version": "1.0.0",
+  "description": "YouTube content provider for OMG-Roma",
+  "author": "McCoy88f",
+  "language": "javascript",
+  "port": 3001,
+  
+  "endpoints": {
+    "search": "/search",
+    "discover": "/discover",
+    "meta": "/meta",
+    "stream": "/stream"
+  },
+  
+  "stremio": {
+    "search_catalog_name": "Ricerca YouTube",
+    "search_catalog_id": "youtube_search",
+    "discover_catalog_name": "YouTube Discover", 
+    "discover_catalog_id": "youtube_discover"
+  },
+  
+  "config_schema": {
+    "api_key": {
+      "type": "string",
+      "required": false,
+      "description": "YouTube Data API v3 Key (optional, fallback to yt-dlp search)",
+      "default": ""
+    },
+    "search_mode": {
+      "type": "string",
+      "enum": ["api", "ytdlp", "hybrid"],
+      "default": "hybrid",
+      "description": "Search mode: api (fast with quota), ytdlp (free but slow), hybrid (auto fallback)"
+    },
+    "followed_channels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of YouTube channel URLs to follow in Discover section",
+      "default": []
+    },
+    "video_limit": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 50,
+      "default": 20,
+      "description": "Number of videos to fetch per request"
+    },
+    "quality_preference": {
+      "type": "string",
+      "enum": ["best", "worst", "720p", "1080p"],
+      "default": "best",
+      "description": "Preferred video quality for yt-dlp extraction"
+    },
+    "adult_content": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow adult/mature content in results"
+    }
+  },
+  
+  "dependencies": {
+    "system": ["yt-dlp", "ffmpeg"],
+    "language": {
+      "npm": [
+        "express",
+        "axios", 
+        "googleapis",
+        "child_process",
+        "fs-extra"
+      ]
+    }
+  },
+  
+  "health_check": {
+    "endpoint": "/health",
+    "interval": 30,
+    "timeout": 10
+  },
+  
+  "features": {
+    "search": true,
+    "discover": true,
+    "streaming": true,
+    "metadata": true,
+    "thumbnails": true,
+    "hls_support": true,
+    "mp4_support": true
+  },
+  
+  "content_types": {
+    "music": true,
+    "entertainment": true,
+    "education": true,
+    "news": true,
+    "sports": true,
+    "gaming": true,
+    "adult": false
+  }
+}

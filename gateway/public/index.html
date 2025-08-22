@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMG-Roma - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .card h3 {
+            color: #5a67d8;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .status-healthy { background-color: #48bb78; }
+        .status-unhealthy { background-color: #f56565; }
+        .status-unknown { background-color: #ed8936; }
+
+        .manifest-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .manifest-url {
+            background: #f7fafc;
+            border: 2px dashed #cbd5e0;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            word-break: break-all;
+            text-align: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-secondary {
+            background: #718096;
+        }
+
+        .config-form {
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .plugin-catalogs {
+            margin-top: 15px;
+        }
+
+        .catalog-item {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .success {
+            background: #c6f6d5;
+            color: #2d7238;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 OMG-Roma</h1>
+            <p>Dashboard Addon Modulare per Stremio</p>
+        </div>
+
+        <div class="manifest-section">
+            <h3>📱 Aggiungi a Stremio</h3>
+            <p>Copia questo URL e aggiungilo in Stremio → Addons → Community Addons:</p>
+            <div class="manifest-url" id="manifestUrl">
+                Caricamento...
+            </div>
+            <button class="btn" onclick="copyManifestUrl()">📋 Copia URL</button>
+            <button class="btn btn-secondary" onclick="openStremio()">🚀 Apri Stremio</button>
+        </div>
+
+        <div class="dashboard" id="dashboard">
+            <div class="loading">
+                <h3>🔄 Caricamento dashboard...</h3>
+                <p>Connessione ai plugin in corso...</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>OMG-Roma v1.0.0 by McCoy88f - Addon modulare per streaming multi-piattaforma</p>
+            <p><a href="https://github.com/mccoy88f/OMG-Roma" target="_blank" style="color: white;">🔗 GitHub Repository</a></p>
+        </div>
+    </div>
+
+    <script>
+        let currentData = {};
+
+        async function loadDashboard() {
+            try {
+                const [statusResponse, pluginsResponse, manifestResponse] = await Promise.all([
+                    fetch('/api/status').then(r => r.json()),
+                    fetch('/api/plugins').then(r => r.json()),
+                    fetch('/api/manifest').then(r => r.json())
+                ]);
+
+                currentData = {
+                    status: statusResponse,
+                    plugins: pluginsResponse.plugins || [],
+                    manifest: manifestResponse
+                };
+
+                updateManifestUrl(manifestResponse.manifestUrl);
+                renderDashboard();
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showError('Errore nel caricamento della dashboard');
+            }
+        }
+
+        function updateManifestUrl(url) {
+            const manifestUrlElement = document.getElementById('manifestUrl');
+            manifestUrlElement.textContent = url || 'http://localhost:3100/manifest.json';
+        }
+
+        function renderDashboard() {
+            const dashboard = document.getElementById('dashboard');
+            
+            if (!currentData.plugins || currentData.plugins.length === 0) {
+                dashboard.innerHTML = `
+                    <div class="card">
+                        <h3>⚠️ Nessun Plugin</h3>
+                        <p>Nessun plugin disponibile. Verifica la configurazione Docker.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            dashboard.innerHTML = currentData.plugins.map(plugin => `
+                <div class="card">
+                    <h3>📦 ${plugin.name}</h3>
+                    <div class="status">
+                        <span class="status-indicator status-${plugin.status}"></span>
+                        <span>Status: ${plugin.status}</span>
+                    </div>
+                    <p><strong>Versione:</strong> ${plugin.version}</p>
+                    <p><strong>Descrizione:</strong> ${plugin.description}</p>
+                    
+                    <div class="plugin-catalogs">
+                        <strong>Cataloghi Stremio:</strong>
+                        ${plugin.stremio.search_catalog_name ? `
+                            <div class="catalog-item">🔍 ${plugin.stremio.search_catalog_name}</div>
+                        ` : ''}
+                        ${plugin.stremio.discover_catalog_name ? `
+                            <div class="catalog-item">📺 ${plugin.stremio.discover_catalog_name}</div>
+                        ` : ''}
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <button class="btn" onclick="configurePlugin('${plugin.id}')">⚙️ Configura</button>
+                        <button class="btn btn-secondary" onclick="testPlugin('${plugin.id}')">🧪 Test</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function configurePlugin(pluginId) {
+            try {
+                const response = await fetch(`/api/plugins/${pluginId}/config`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    showError(data.error);
+                    return;
+                }
+
+                showConfigModal(pluginId, data.config, data.schema);
+
+            } catch (error) {
+                console.error('Error loading plugin config:', error);
+                showError('Errore nel caricamento della configurazione');
+            }
+        }
+
+        function showConfigModal(pluginId, config, schema) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+
+            modal.innerHTML = `
+                <div style="background: white; border-radius: 15px; padding: 30px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                    <h3>⚙️ Configurazione ${pluginId}</h3>
+                    <form id="configForm">
+                        ${Object.entries(schema).map(([key, schemaInfo]) => `
+                            <div class="form-group">
+                                <label>${key}:</label>
+                                ${renderConfigField(key, config[key], schemaInfo)}
+                                <small style="color: #718096;">${schemaInfo.description || ''}</small>
+                            </div>
+                        `).join('')}
+                    </form>
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+                        <button class="btn" onclick="saveConfig('${pluginId}')">💾 Salva</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            window.currentModal = modal;
+        }
+
+        function renderConfigField(key, value, schema) {
+            if (schema.type === 'boolean') {
+                return `<input type="checkbox" name="${key}" ${value ? 'checked' : ''}>`;
+            } else if (schema.enum) {
+                return `
+                    <select name="${key}">
+                        ${schema.enum.map(option => `
+                            <option value="${option}" ${value === option ? 'selected' : ''}>${option}</option>
+                        `).join('')}
+                    </select>
+                `;
+            } else if (schema.type === 'array') {
+                return `<textarea name="${key}" rows="4" placeholder="Un elemento per riga">${Array.isArray(value) ? value.join('\n') : ''}</textarea>`;
+            } else {
+                return `<input type="text" name="${key}" value="${value || ''}" placeholder="${schema.default || ''}">`;
+            }
+        }
+
+        async function saveConfig(pluginId) {
+            try {
+                const form = document.getElementById('configForm');
+                const formData = new FormData(form);
+                const config = {};
+
+                for (const [key, value] of formData.entries()) {
+                    const field = form.querySelector(`[name="${key}"]`);
+                    
+                    if (field.type === 'checkbox') {
+                        config[key] = field.checked;
+                    } else if (field.tagName === 'TEXTAREA') {
+                        config[key] = value.split('\n').filter(line => line.trim());
+                    } else {
+                        config[key] = value;
+                    }
+                }
+
+                const response = await fetch(`/api/plugins/${pluginId}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess('Configurazione salvata con successo!');
+                    closeModal();
+                    loadDashboard(); // Reload dashboard
+                } else {
+                    showError(result.error);
+                }
+
+            } catch (error) {
+                console.error('Error saving config:', error);
+                showError('Errore nel salvataggio della configurazione');
+            }
+        }
+
+        async function testPlugin(pluginId) {
+            try {
+                showSuccess('🧪 Test del plugin in corso...');
+
+                const response = await fetch(`/api/plugins/${pluginId}/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ testType: 'search', query: 'test' })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess(`✅ Test completato! Trovati ${result.result.videoCount} video in ${result.duration}`);
+                } else {
+                    showError(`❌ Test fallito: ${result.error}`);
+                }
+
+            } catch (error) {
+                console.error('Error testing plugin:', error);
+                showError('Errore durante il test del plugin');
+            }
+        }
+
+        function copyManifestUrl() {
+            const url = document.getElementById('manifestUrl').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                showSuccess('📋 URL copiato negli appunti!');
+            });
+        }
+
+        function openStremio() {
+            window.open('stremio://');
+        }
+
+        function closeModal() {
+            if (window.currentModal) {
+                document.body.removeChild(window.currentModal);
+                window.currentModal = null;
+            }
+        }
+
+        function showError(message) {
+            showNotification(message, 'error');
+        }
+
+        function showSuccess(message) {
+            showNotification(message, 'success');
+        }
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = type;
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 2000;
+                max-width: 300px;
+            `;
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 5000);
+        }
+
+        // Auto-refresh dashboard every 30 seconds
+        setInterval(loadDashboard, 30000);
+
+        // Load dashboard on page load
+        loadDashboard();
+    </script>
+</body>
+</html>

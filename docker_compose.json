@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: 
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PLUGINS_DIR=/app/plugins
+      - CONFIG_DIR=/app/config
+    volumes:
+      - ./config:/app/config
+      - ./plugins:/app/plugins
+    depends_on:
+      - youtube-plugin
+    networks:
+      - addon-network
+
+  youtube-plugin:
+    build: 
+      context: ./plugins/youtube
+      dockerfile: Dockerfile
+    environment:
+      - PORT=3001
+      - CONFIG_FILE=/app/config.json
+    volumes:
+      - ./config/youtube.config.json:/app/config.json:ro
+    networks:
+      - addon-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  addon-network:
+    driver: bridge
+
+volumes:
+  config_data:

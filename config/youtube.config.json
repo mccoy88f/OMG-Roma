@@ -1,0 +1,26 @@
+{
+  "api_key": "",
+  "search_mode": "hybrid",
+  "followed_channels": [
+    "https://www.youtube.com/@kurzgesagt",
+    "https://www.youtube.com/@veritasium",
+    "https://www.youtube.com/@3blue1brown"
+  ],
+  "video_limit": 20,
+  "quality_preference": "best", 
+  "adult_content": false,
+  "_metadata": {
+    "description": "OMG-Roma YouTube Plugin Configuration",
+    "author": "McCoy88f",
+    "last_updated": "2024-01-01T00:00:00.000Z",
+    "version": "1.0.0",
+    "schema": {
+      "api_key": "YouTube Data API v3 Key (optional)",
+      "search_mode": "api|ytdlp|hybrid - Search method preference",
+      "followed_channels": "Array of YouTube channel URLs for Discover section",
+      "video_limit": "Number of videos to fetch per request (5-50)",
+      "quality_preference": "best|worst|720p|1080p - Preferred quality for yt-dlp",
+      "adult_content": "Boolean - Allow adult/mature content in results"
+    }
+  }
+}
