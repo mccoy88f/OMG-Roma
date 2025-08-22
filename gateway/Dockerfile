@@ -21,9 +21,8 @@ COPY gateway/public/ ./public/
 # Create directories
 RUN mkdir -p /app/config /app/plugins
 
-# Add health check script
-COPY gateway/health-check.sh ./
-RUN chmod +x health-check.sh
+# Create health check script inline
+RUN echo '#!/bin/bash\nresponse=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/health)\nif [ "$response" = "200" ]; then\n    echo "✅ OMG-Roma Gateway is healthy"\n    exit 0\nelse\n    echo "❌ OMG-Roma Gateway health check failed (HTTP: $response)"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -40,7 +39,7 @@ EXPOSE 3100
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ./health-check.sh
+    CMD /app/health-check.sh
 
 # Start the application
 CMD ["node", "src/index.js"]
