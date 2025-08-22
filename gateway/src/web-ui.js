@@ -109,7 +109,7 @@ class WebUI {
             success: true,
             pluginId,
             message: 'Configuration updated successfully',
-            config: response.config || {},
+            config: response.config || response || {},
             manifest: {
               updated: true,
               newUrl: newManifestUrl,
