@@ -50,6 +50,17 @@ app.get('/plugin.json', (req, res) => {
   }
 });
 
+// Plugin info endpoint
+app.get('/plugin.json', (req, res) => {
+  try {
+    const pluginInfo = require('./plugin.json');
+    res.json(pluginInfo);
+  } catch (error) {
+    console.error('❌ Error loading plugin.json:', error);
+    res.status(404).json({ error: 'Plugin info not found' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
