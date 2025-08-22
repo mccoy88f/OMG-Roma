@@ -29,8 +29,7 @@ services:
     environment:
       - PORT=3001
       - CONFIG_FILE=/app/config.json
-    volumes:
-      - omg_roma_youtube_config:/app/config.json
+    # Rimosso volume mount problematico - config viene copiato nel Dockerfile
     networks:
       - omg-roma-network
     restart: unless-stopped
