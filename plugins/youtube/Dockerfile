@@ -1,15 +1,28 @@
 FROM node:18-alpine
 
-# Install system dependencies
+# Install system dependencies and build tools
 RUN apk add --no-cache \
     python3 \
     py3-pip \
+    py3-setuptools \
+    py3-wheel \
     ffmpeg \
     curl \
-    bash
+    bash \
+    gcc \
+    musl-dev \
+    python3-dev \
+    libffi-dev \
+    openssl-dev \
+    cargo \
+    rust
 
-# Install yt-dlp
-RUN pip3 install --no-cache-dir yt-dlp
+# Install yt-dlp with build dependencies
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip3 install --no-cache-dir yt-dlp
+
+# Clean up build dependencies to reduce image size
+RUN apk del gcc musl-dev python3-dev libffi-dev openssl-dev cargo rust
 
 # Create app directory
 WORKDIR /app
