@@ -1,21 +1,31 @@
 FROM node:20-bookworm-slim
 
-# Install system dependencies (seguendo approccio originale OMG-YouTube)
+# Install system dependencies
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     bash \
+    git \
   && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files (with fallback if package-lock.json missing)
 COPY gateway/package*.json ./
 
-# Install npm dependencies
-RUN npm ci --only=production
+# Debug: List copied files
+RUN ls -la /app/
+
+# Install npm dependencies with fallback
+RUN if [ -f package-lock.json ]; then \
+      echo "🔒 Using npm ci (package-lock.json found)"; \
+      npm ci --only=production --no-audit --no-fund; \
+    else \
+      echo "📦 Using npm install (no package-lock.json)"; \
+      npm install --only=production --no-audit --no-fund; \
+    fi
 
 # Copy application code
 COPY gateway/src/ ./src/
