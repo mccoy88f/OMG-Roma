@@ -204,7 +204,8 @@ class PluginManager {
                 search: "/search",
                 discover: "/discover", 
                 meta: "/meta",
-                stream: "/stream"
+                stream: "/stream",
+                config: "/config"
               },
               stremio: {
                 search_catalog_name: `Ricerca ${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)}`,
@@ -268,6 +269,11 @@ class PluginManager {
         status: 'discovered',
         lastHealthCheck: null
       };
+      
+      // Ensure config endpoint exists
+      if (!pluginConfig.endpoints.config) {
+        pluginConfig.endpoints.config = "/config";
+      }
       
       this.plugins.set(pluginId, plugin);
       console.log(`📦 Loaded plugin: ${pluginConfig.name} (${pluginId})`);

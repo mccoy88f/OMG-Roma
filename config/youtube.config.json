@@ -1,11 +1,7 @@
 {
   "api_key": "",
   "search_mode": "hybrid",
-  "followed_channels": [
-    "https://www.youtube.com/@kurzgesagt",
-    "https://www.youtube.com/@veritasium",
-    "https://www.youtube.com/@3blue1brown"
-  ],
+  "followed_channels": [],
   "video_limit": 20,
   "quality_preference": "best", 
   "adult_content": false,

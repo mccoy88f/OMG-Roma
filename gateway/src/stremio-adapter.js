@@ -1,6 +1,8 @@
 class StremioAdapter {
   constructor(pluginManager) {
     this.pluginManager = pluginManager;
+    this.manifestCache = new Map(); // Cache per manifest personalizzati
+    this.configCache = new Map();   // Cache per configurazioni plugin
   }
 
   async generateManifest(configHash = null) {
@@ -93,7 +95,7 @@ class StremioAdapter {
   }
 
   // Generate configuration hash for personalized manifests
-  generateConfigHash() {
+  async generateConfigHash() {
     try {
       const plugins = this.pluginManager.getAllPlugins();
       const configData = {};
@@ -104,7 +106,7 @@ class StremioAdapter {
           id: plugin.config.id,
           version: plugin.config.version,
           // Include plugin-specific configuration
-          config: this.extractPluginConfig(plugin)
+          config: await this.extractPluginConfig(plugin)
         };
         configData[plugin.config.id] = pluginConfig;
       }
@@ -121,19 +123,34 @@ class StremioAdapter {
   }
 
   // Extract relevant configuration from plugin
-  extractPluginConfig(plugin) {
+  async extractPluginConfig(plugin) {
     try {
       const config = {};
       
-      // Extract YouTube-specific configuration
-      if (plugin.config.id === 'youtube') {
-        const youtubeConfig = plugin.config;
-        config.search_mode = youtubeConfig.search_mode;
-        config.followed_channels = youtubeConfig.followed_channels || [];
-        config.api_key_configured = !!youtubeConfig.api_key;
+      // Get current plugin configuration from the plugin itself
+      try {
+        const currentConfig = await this.pluginManager.callPlugin(plugin.config.id, 'config');
+        
+        // Extract YouTube-specific configuration
+        if (plugin.config.id === 'youtube') {
+          config.search_mode = currentConfig.search_mode || 'hybrid';
+          config.followed_channels = currentConfig.followed_channels || [];
+          config.api_key_configured = !!currentConfig.api_key;
+          config.video_limit = currentConfig.video_limit || 20;
+          config.quality_preference = currentConfig.quality_preference || 'best';
+        }
+        
+        // Add more plugin-specific configurations here
+        
+      } catch (configError) {
+        console.warn(`⚠️  Could not get current config for ${plugin.config.id}:`, configError.message);
+        // Fallback to plugin.json config
+        if (plugin.config.id === 'youtube') {
+          config.search_mode = 'hybrid';
+          config.followed_channels = [];
+          config.api_key_configured = false;
+        }
       }
-      
-      // Add more plugin-specific configurations here
       
       return config;
     } catch (error) {
@@ -154,6 +171,41 @@ class StremioAdapter {
     }
     
     return Math.abs(hash).toString(36); // Convert to base36 for shorter strings
+  }
+
+  // Clear manifest cache when configuration changes
+  clearManifestCache() {
+    this.manifestCache.clear();
+    this.configCache.clear();
+    console.log('🧹 Manifest cache cleared - configuration changed');
+  }
+
+  // Force regenerate manifest for a specific plugin
+  async regenerateManifestForPlugin(pluginId) {
+    try {
+      // Clear cache for this plugin
+      this.configCache.delete(pluginId);
+      
+      // Generate new config hash
+      const newConfigHash = await this.generateConfigHash();
+      
+      // Generate new manifest
+      const newManifest = await this.generateManifest(newConfigHash);
+      
+      // Cache the new manifest
+      this.manifestCache.set(newConfigHash, newManifest);
+      
+      console.log(`🔄 Manifest regenerated for ${pluginId} with hash: ${newConfigHash}`);
+      
+      return {
+        configHash: newConfigHash,
+        manifest: newManifest
+      };
+      
+    } catch (error) {
+      console.error(`❌ Error regenerating manifest for ${pluginId}:`, error);
+      throw error;
+    }
   }
 
   async handleCatalogRequest(catalogId, extraParams) {

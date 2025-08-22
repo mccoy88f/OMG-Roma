@@ -195,6 +195,33 @@ async function saveConfig(pluginId) {
 
         if (result.success) {
             showSuccess('Configurazione salvata con successo!');
+            
+            // Show new manifest URL if available
+            if (result.manifest && result.manifest.updated) {
+                showSuccess(`🔄 Manifest aggiornato! Nuovo URL: ${result.manifest.newUrl}`);
+                
+                // Update manifest URL in dashboard
+                const manifestUrlElement = document.getElementById('manifestUrl');
+                if (manifestUrlElement) {
+                    manifestUrlElement.textContent = result.manifest.newUrl;
+                    
+                    // Update config hash info
+                    const existingInfo = manifestUrlElement.parentNode.querySelector('.config-info');
+                    if (existingInfo) {
+                        existingInfo.remove();
+                    }
+                    
+                    const configInfo = document.createElement('div');
+                    configInfo.className = 'config-info';
+                    configInfo.innerHTML = `
+                        <small style="color: #718096; margin-top: 5px; display: block;">
+                            🔧 Manifest personalizzato (config: ${result.manifest.configHash})
+                        </small>
+                    `;
+                    manifestUrlElement.parentNode.appendChild(configInfo);
+                }
+            }
+            
             closeModal();
             loadDashboard(); // Reload dashboard
         } else {
@@ -239,9 +266,55 @@ function copyManifestUrl() {
 }
 
 function openStremio() {
-    // Open Stremio addon in browser instead of desktop app
+    // Open Stremio desktop app with the manifest URL
     const manifestUrl = document.getElementById('manifestUrl').textContent;
-    window.open(manifestUrl, '_blank');
+    window.open(`stremio://${manifestUrl}`, '_blank');
+}
+
+async function regenerateManifest() {
+    try {
+        showSuccess('🔄 Rigenerazione manifest in corso...');
+        
+        const response = await fetch('/api/manifest/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update manifest URL
+            const manifestUrlElement = document.getElementById('manifestUrl');
+            if (manifestUrlElement) {
+                manifestUrlElement.textContent = result.manifestUrl;
+                
+                // Update config hash info
+                const existingInfo = manifestUrlElement.parentNode.querySelector('.config-info');
+                if (existingInfo) {
+                    existingInfo.remove();
+                }
+                
+                if (result.configHash) {
+                    const configInfo = document.createElement('div');
+                    configInfo.className = 'config-info';
+                    configInfo.innerHTML = `
+                        <small style="color: #718096; margin-top: 5px; display: block;">
+                            🔧 Manifest personalizzato (config: ${result.configHash})
+                        </small>
+                    `;
+                    manifestUrlElement.parentNode.appendChild(configInfo);
+                }
+            }
+            
+            showSuccess(`✅ Manifest rigenerato con successo! Hash: ${result.configHash}`);
+        } else {
+            showError(`❌ Errore nella rigenerazione: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Error regenerating manifest:', error);
+        showError('Errore durante la rigenerazione del manifest');
+    }
 }
 
 function closeModal() {
@@ -300,6 +373,9 @@ document.addEventListener('click', function(event) {
             break;
         case 'open-stremio':
             openStremio();
+            break;
+        case 'regenerate-manifest':
+            regenerateManifest();
             break;
         case 'close-modal':
             closeModal();

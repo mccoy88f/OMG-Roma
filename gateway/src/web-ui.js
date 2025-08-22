@@ -93,12 +93,39 @@ class WebUI {
         // Send config update to plugin
         const response = await this.pluginManager.callPlugin(pluginId, 'config', newConfig);
 
-        res.json({
-          success: true,
-          pluginId,
-          message: 'Configuration updated successfully',
-          config: response.config || {}
-        });
+        // Regenerate manifest after configuration change
+        try {
+          const StremioAdapter = require('./stremio-adapter');
+          const stremioAdapter = new StremioAdapter(this.pluginManager);
+          
+          const manifestUpdate = await stremioAdapter.regenerateManifestForPlugin(pluginId);
+          
+          // Generate new manifest URL
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          const newManifestUrl = `${baseUrl}/manifest.json?config=${manifestUpdate.configHash}`;
+          
+          res.json({
+            success: true,
+            pluginId,
+            message: 'Configuration updated successfully',
+            config: response.config || {},
+            manifest: {
+              updated: true,
+              newUrl: newManifestUrl,
+              configHash: manifestUpdate.configHash
+            }
+          });
+          
+        } catch (manifestError) {
+          console.warn('⚠️  Could not regenerate manifest:', manifestError.message);
+          // Still return success for config update
+          res.json({
+            success: true,
+            pluginId,
+            message: 'Configuration updated successfully (manifest update failed)',
+            config: response.config || {}
+          });
+        }
 
       } catch (error) {
         console.error('❌ Error updating plugin config:', error);
@@ -176,8 +203,17 @@ class WebUI {
         const StremioAdapter = require('./stremio-adapter');
         const stremioAdapter = new StremioAdapter(this.pluginManager);
         
+        // Check if force regeneration is requested
+        const { force } = req.query;
+        
+        if (force === 'true') {
+          // Clear cache and regenerate
+          stremioAdapter.clearManifestCache();
+          console.log('🔄 Force manifest regeneration requested');
+        }
+        
         // Generate configuration hash for personalized manifest
-        const configHash = stremioAdapter.generateConfigHash();
+        const configHash = await stremioAdapter.generateConfigHash();
         const manifest = await stremioAdapter.generateManifest(configHash);
         
         // Generate personalized manifest URL
@@ -192,7 +228,8 @@ class WebUI {
           catalogCount: manifest.catalogs.length,
           manifestUrl,
           configHash,
-          isPersonalized: !!configHash
+          isPersonalized: !!configHash,
+          regenerated: force === 'true'
         });
 
       } catch (error) {
@@ -200,6 +237,43 @@ class WebUI {
         res.status(500).json({ 
           success: false, 
           error: 'Failed to generate manifest' 
+        });
+      }
+    });
+
+    // Force regenerate manifest for all plugins
+    this.router.post('/manifest/regenerate', async (req, res) => {
+      try {
+        const StremioAdapter = require('./stremio-adapter');
+        const stremioAdapter = new StremioAdapter(this.pluginManager);
+        
+        // Clear all caches
+        stremioAdapter.clearManifestCache();
+        
+        // Generate new manifest
+        const configHash = await stremioAdapter.generateConfigHash();
+        const manifest = await stremioAdapter.generateManifest(configHash);
+        
+        // Generate new manifest URL
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const manifestUrl = configHash 
+          ? `${baseUrl}/manifest.json?config=${configHash}`
+          : `${baseUrl}/manifest.json`;
+        
+        res.json({
+          success: true,
+          message: 'Manifest regenerated successfully',
+          manifest,
+          manifestUrl,
+          configHash,
+          isPersonalized: !!configHash
+        });
+
+      } catch (error) {
+        console.error('❌ Error regenerating manifest:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: 'Failed to regenerate manifest' 
         });
       }
     });

@@ -11,7 +11,8 @@
     "search": "/search",
     "discover": "/discover",
     "meta": "/meta",
-    "stream": "/stream"
+    "stream": "/stream",
+    "config": "/config"
   },
   
   "stremio": {
