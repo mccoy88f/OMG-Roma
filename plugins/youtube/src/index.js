@@ -75,6 +75,41 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Readiness check endpoint (more comprehensive than health)
+app.get('/ready', (req, res) => {
+  try {
+    // Check if all services are properly initialized
+    const isReady = youtubeAPI && ytdlpService && ytdlpService.isAvailable();
+    
+    if (isReady) {
+      res.json({
+        status: 'ready',
+        timestamp: new Date().toISOString(),
+        plugin: 'youtube',
+        version: '1.0.0',
+        services: {
+          youtube_api: youtubeAPI.isConfigured(),
+          ytdlp: ytdlpService.isAvailable()
+        }
+      });
+    } else {
+      res.status(503).json({
+        status: 'not_ready',
+        timestamp: new Date().toISOString(),
+        plugin: 'youtube',
+        reason: 'Services not fully initialized'
+      });
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      plugin: 'youtube',
+      error: error.message
+    });
+  }
+});
+
 // Search endpoint
 app.post('/search', async (req, res) => {
   try {
@@ -286,6 +321,7 @@ async function startServer() {
       console.log(`🌐 OMG-Roma YouTube Plugin listening on: http://0.0.0.0:${PORT}`);
       console.log(`🔧 Configuration: ${config.get('search_mode')} mode`);
       console.log(`📺 Following ${config.get('followed_channels', []).length} channels`);
+      console.log(`✅ Plugin is ready to accept requests`);
     });
     
   } catch (error) {

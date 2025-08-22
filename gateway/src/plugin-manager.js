@@ -169,39 +169,53 @@ class PluginManager {
       console.log(`🔗 Plugin info:`, pluginInfo);
       
       // Get plugin config from the plugin container directly
-      const baseUrl = `http://${pluginId}-plugin:${pluginInfo.port}`;
+      const baseUrl = `http://omg-${pluginId}-plugin:${pluginInfo.port}`;
       console.log(`🌐 Trying to connect to: ${baseUrl}`);
       
-      // Try to get plugin.json from the container via HTTP
+      // Try to get plugin.json from the container via HTTP with retry
       let pluginConfig;
-      try {
-        console.log(`📄 Fetching plugin config from ${baseUrl}/plugin.json`);
-        const response = await axios.get(`${baseUrl}/plugin.json`, { timeout: 5000 });
-        pluginConfig = response.data;
-        console.log(`✅ Retrieved plugin config for ${pluginId} via HTTP`);
-      } catch (httpError) {
-        console.error(`❌ HTTP error for ${pluginId}:`, httpError.message);
-        
-        // Fallback: create basic config from registry info
-        console.log(`⚠️  Could not fetch plugin.json via HTTP, using registry info`);
-        pluginConfig = {
-          id: pluginId,
-          name: pluginId.charAt(0).toUpperCase() + pluginId.slice(1),
-          version: "1.0.0",
-          port: pluginInfo.port,
-          endpoints: {
-            search: "/search",
-            discover: "/discover", 
-            meta: "/meta",
-            stream: "/stream"
-          },
-          stremio: {
-            search_catalog_name: `Ricerca ${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)}`,
-            search_catalog_id: `${pluginId}_search`,
-            discover_catalog_name: `${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)} Discover`,
-            discover_catalog_id: `${pluginId}_discover`
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          console.log(`📄 Fetching plugin config from ${baseUrl}/plugin.json (attempt ${retryCount + 1}/${maxRetries})`);
+          const response = await axios.get(`${baseUrl}/plugin.json`, { timeout: 10000 });
+          pluginConfig = response.data;
+          console.log(`✅ Retrieved plugin config for ${pluginId} via HTTP`);
+          break;
+        } catch (httpError) {
+          retryCount++;
+          console.error(`❌ HTTP error for ${pluginId} (attempt ${retryCount}/${maxRetries}):`, httpError.message);
+          
+          if (retryCount >= maxRetries) {
+            // Fallback: create basic config from registry info
+            console.log(`⚠️  Could not fetch plugin.json via HTTP after ${maxRetries} attempts, using registry info`);
+            pluginConfig = {
+              id: pluginId,
+              name: pluginId.charAt(0).toUpperCase() + pluginId.slice(1),
+              version: "1.0.0",
+              port: pluginInfo.port,
+              endpoints: {
+                search: "/search",
+                discover: "/discover", 
+                meta: "/meta",
+                stream: "/stream"
+              },
+              stremio: {
+                search_catalog_name: `Ricerca ${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)}`,
+                search_catalog_id: `${pluginId}_search`,
+                discover_catalog_name: `${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)} Discover`,
+                discover_catalog_id: `${pluginId}_discover`
+              }
+            };
+          } else {
+            // Wait before retry
+            const waitTime = retryCount * 2000; // 2s, 4s, 6s
+            console.log(`⏳ Waiting ${waitTime/1000}s before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
           }
-        };
+        }
       }
       
       console.log(`🔧 Plugin config for ${pluginId}:`, JSON.stringify(pluginConfig, null, 2));
@@ -246,7 +260,7 @@ class PluginManager {
       const plugin = {
         id: pluginId,
         config: pluginConfig,
-        baseUrl: `http://${pluginId}-plugin:${pluginConfig.port}`,
+        baseUrl: `http://omg-${pluginId}-plugin:${pluginConfig.port}`,
         status: 'discovered',
         lastHealthCheck: null
       };
@@ -275,25 +289,28 @@ class PluginManager {
     return true;
   }
 
-  async waitForPluginsReady(timeout = 30000) {
+  async waitForPluginsReady(timeout = 60000) {
     console.log('⏳ Waiting for plugins to be ready...');
     
     const startTime = Date.now();
-    const checkInterval = 2000;
+    const checkInterval = 3000;
     
     while (Date.now() - startTime < timeout) {
       let allReady = true;
       
       for (const [pluginId, plugin] of this.plugins) {
         try {
+          console.log(`🔍 Checking health of plugin: ${pluginId}`);
           const healthCheck = await this.checkPluginHealth(pluginId);
           if (!healthCheck.healthy) {
+            console.log(`⚠️  Plugin ${pluginId} not ready yet:`, healthCheck.error || 'Health check failed');
             allReady = false;
-            break;
+          } else {
+            console.log(`✅ Plugin ${pluginId} is healthy`);
           }
         } catch (error) {
+          console.log(`❌ Plugin ${pluginId} health check error:`, error.message);
           allReady = false;
-          break;
         }
       }
       
@@ -302,6 +319,7 @@ class PluginManager {
         return true;
       }
       
+      console.log(`⏳ Waiting ${checkInterval/1000}s before next health check...`);
       await new Promise(resolve => setTimeout(resolve, checkInterval));
     }
     
@@ -316,8 +334,9 @@ class PluginManager {
     }
     
     try {
+      console.log(`🔍 Health check for ${pluginId} at ${plugin.baseUrl}/health`);
       const response = await axios.get(`${plugin.baseUrl}/health`, {
-        timeout: 5000
+        timeout: 10000
       });
       
       const healthy = response.status === 200 && response.data.status === 'healthy';
@@ -334,6 +353,8 @@ class PluginManager {
     } catch (error) {
       plugin.status = 'unhealthy';
       plugin.lastHealthCheck = new Date().toISOString();
+      
+      console.log(`❌ Health check failed for ${pluginId}:`, error.message);
       
       return {
         healthy: false,
