@@ -67,11 +67,20 @@ function renderDashboard() {
 
     dashboard.innerHTML = currentData.plugins.map(plugin => `
         <div class="card">
-            <h3>📦 ${plugin.name}</h3>
-            <div class="status">
-                <span class="status-indicator status-${plugin.status}"></span>
-                <span>Status: ${plugin.status}</span>
+            <div class="plugin-header">
+                <div class="plugin-selector">
+                    <input type="checkbox" id="plugin-${plugin.id}" data-plugin-id="${plugin.id}" 
+                           ${plugin.manifestEnabled ? 'checked' : ''} class="plugin-checkbox">
+                    <label for="plugin-${plugin.id}" class="plugin-label">
+                        <h3>📦 ${plugin.name}</h3>
+                    </label>
+                </div>
+                <div class="status">
+                    <span class="status-indicator status-${plugin.status}"></span>
+                    <span>Status: ${plugin.status}</span>
+                </div>
             </div>
+            
             <p><strong>Versione:</strong> ${plugin.version}</p>
             <p><strong>Descrizione:</strong> ${plugin.description}</p>
             
@@ -317,6 +326,131 @@ async function regenerateManifest() {
     }
 }
 
+async function togglePluginInManifest(pluginId, enabled) {
+    try {
+        showSuccess(`${enabled ? '✅' : '❌'} Plugin ${pluginId} ${enabled ? 'abilitato' : 'disabilitato'} nel manifest...`);
+        
+        const response = await fetch('/api/manifest/plugins', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                pluginId: pluginId,
+                enabled: enabled
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess(`✅ Plugin ${pluginId} ${enabled ? 'abilitato' : 'disabilitato'} nel manifest!`);
+            
+            // Update manifest URL if available
+            if (result.manifest && result.manifest.updated) {
+                const manifestUrlElement = document.getElementById('manifestUrl');
+                if (manifestUrlElement) {
+                    manifestUrlElement.textContent = result.manifest.newUrl;
+                    
+                    // Update config hash info
+                    const existingInfo = manifestUrlElement.parentNode.querySelector('.config-info');
+                    if (existingInfo) {
+                        existingInfo.remove();
+                    }
+                    
+                    if (result.manifest.configHash) {
+                        const configInfo = document.createElement('div');
+                        configInfo.className = 'config-info';
+                        configInfo.innerHTML = `
+                            <small style="color: #718096; margin-top: 5px; display: block;">
+                                🔧 Manifest aggiornato (config: ${result.manifest.configHash})
+                            </small>
+                        `;
+                        manifestUrlElement.parentNode.appendChild(configInfo);
+                            }
+    }
+}
+
+async function savePluginSelection() {
+    try {
+        showSuccess('💾 Salvataggio selezione plugin in corso...');
+        
+        // Get all plugin checkboxes
+        const checkboxes = document.querySelectorAll('.plugin-checkbox');
+        const pluginSelection = {};
+        
+        checkboxes.forEach(checkbox => {
+            const pluginId = checkbox.getAttribute('data-plugin-id');
+            const enabled = checkbox.checked;
+            pluginSelection[pluginId] = enabled;
+        });
+        
+        // Save plugin selection
+        const response = await fetch('/api/manifest/plugins/selection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugins: pluginSelection })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess('✅ Selezione plugin salvata con successo!');
+            
+            // Update manifest URL if available
+            if (result.manifest && result.manifest.updated) {
+                const manifestUrlElement = document.getElementById('manifestUrl');
+                if (manifestUrlElement) {
+                    manifestUrlElement.textContent = result.manifest.newUrl;
+                    
+                    // Update config hash info
+                    const existingInfo = manifestUrlElement.parentNode.querySelector('.config-info');
+                    if (existingInfo) {
+                        existingInfo.remove();
+                    }
+                    
+                    if (result.manifest.configHash) {
+                        const configInfo = document.createElement('div');
+                        configInfo.className = 'config-info';
+                        configInfo.innerHTML = `
+                            <small style="color: #718096; margin-top: 5px; display: block;">
+                                🔧 Manifest aggiornato (config: ${result.manifest.configHash})
+                            </small>
+                        `;
+                        manifestUrlElement.parentNode.appendChild(configInfo);
+                    }
+                }
+            }
+        } else {
+            showError(`❌ Errore nel salvataggio: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Error saving plugin selection:', error);
+        showError('Errore durante il salvataggio della selezione plugin');
+    }
+}
+            
+            // Reload dashboard to show updated plugin status
+            loadDashboard();
+        } else {
+            showError(`❌ Errore nell'aggiornamento del manifest: ${result.error}`);
+            // Revert checkbox state
+            const checkbox = document.getElementById(`plugin-${pluginId}`);
+            if (checkbox) {
+                checkbox.checked = !enabled;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error toggling plugin in manifest:', error);
+        showError('Errore durante l\'aggiornamento del manifest');
+        // Revert checkbox state
+        const checkbox = document.getElementById(`plugin-${pluginId}`);
+        if (checkbox) {
+            checkbox.checked = !enabled;
+        }
+    }
+}
+
 function closeModal() {
     if (window.currentModal) {
         document.body.removeChild(window.currentModal);
@@ -377,12 +511,24 @@ document.addEventListener('click', function(event) {
         case 'regenerate-manifest':
             regenerateManifest();
             break;
+        case 'save-plugin-selection':
+            savePluginSelection();
+            break;
         case 'close-modal':
             closeModal();
             break;
         case 'save-config':
             if (pluginId) saveConfig(pluginId);
             break;
+    }
+});
+
+// Event listener for plugin checkboxes
+document.addEventListener('change', function(event) {
+    if (event.target.classList.contains('plugin-checkbox')) {
+        const pluginId = event.target.getAttribute('data-plugin-id');
+        const enabled = event.target.checked;
+        togglePluginInManifest(pluginId, enabled);
     }
 });
 

@@ -237,7 +237,8 @@ class PluginManager {
         config: pluginConfig,
         baseUrl: baseUrl,
         status: 'discovered',
-        lastHealthCheck: null
+        lastHealthCheck: null,
+        manifestEnabled: true // Default: plugin is enabled in manifest
       };
       
       this.plugins.set(pluginId, plugin);
@@ -267,7 +268,8 @@ class PluginManager {
         config: pluginConfig,
         baseUrl: `http://omg-${pluginId}-plugin:${pluginConfig.port}`,
         status: 'discovered',
-        lastHealthCheck: null
+        lastHealthCheck: null,
+        manifestEnabled: true // Default: plugin is enabled in manifest
       };
       
       // Ensure config endpoint exists

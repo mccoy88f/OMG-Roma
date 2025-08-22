@@ -9,8 +9,14 @@ class StremioAdapter {
     const plugins = this.pluginManager.getAllPlugins();
     const catalogs = [];
     
-    // Generate catalogs from all plugins
+    // Generate catalogs from enabled plugins only
     for (const plugin of plugins) {
+      // Skip disabled plugins
+      if (plugin.manifestEnabled === false) {
+        console.log(`⏸️  Skipping disabled plugin: ${plugin.id}`);
+        continue;
+      }
+      
       const stremio = plugin.config.stremio;
       
       // Search catalog
@@ -100,8 +106,14 @@ class StremioAdapter {
       const plugins = this.pluginManager.getAllPlugins();
       const configData = {};
       
-      // Collect configuration data from all plugins
+      // Collect configuration data from enabled plugins only
       for (const plugin of plugins) {
+        // Skip disabled plugins
+        if (plugin.manifestEnabled === false) {
+          console.log(`⏸️  Skipping disabled plugin in config hash: ${plugin.id}`);
+          continue;
+        }
+        
         const pluginConfig = {
           id: plugin.config.id,
           version: plugin.config.version,

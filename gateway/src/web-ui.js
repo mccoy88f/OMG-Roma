@@ -23,6 +23,7 @@ class WebUI {
           description: plugin.config.description,
           status: status[plugin.id]?.status || 'unknown',
           lastHealthCheck: status[plugin.id]?.lastHealthCheck,
+          manifestEnabled: plugin.manifestEnabled !== false, // Default to true if not set
           stremio: plugin.config.stremio,
           features: plugin.config.features || {},
           content_types: plugin.config.content_types || {}
@@ -274,6 +275,109 @@ class WebUI {
         res.status(500).json({ 
           success: false, 
           error: 'Failed to regenerate manifest' 
+        });
+      }
+    });
+
+    // Toggle plugin in manifest
+    this.router.post('/manifest/plugins', async (req, res) => {
+      try {
+        const { pluginId, enabled } = req.body;
+        
+        if (!pluginId || typeof enabled !== 'boolean') {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid request: pluginId and enabled required'
+          });
+        }
+
+        const plugin = this.pluginManager.plugins.get(pluginId);
+        if (!plugin) {
+          return res.status(404).json({
+            success: false,
+            error: 'Plugin not found'
+          });
+        }
+
+        // Update plugin manifest status
+        plugin.manifestEnabled = enabled;
+        
+        // Regenerate manifest with new plugin selection
+        const StremioAdapter = require('./stremio-adapter');
+        const stremioAdapter = new StremioAdapter(this.pluginManager);
+        
+        const manifestUpdate = await stremioAdapter.regenerateManifestForPlugin(pluginId);
+        
+        // Generate new manifest URL
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const newManifestUrl = `${baseUrl}/manifest.json?config=${manifestUpdate.configHash}`;
+        
+        res.json({
+          success: true,
+          message: `Plugin ${pluginId} ${enabled ? 'enabled' : 'disabled'} in manifest`,
+          manifest: {
+            updated: true,
+            newUrl: newManifestUrl,
+            configHash: manifestUpdate.configHash
+          }
+        });
+
+      } catch (error) {
+        console.error('❌ Error toggling plugin in manifest:', error);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to toggle plugin in manifest'
+        });
+      }
+    });
+
+    // Save complete plugin selection
+    this.router.post('/manifest/plugins/selection', async (req, res) => {
+      try {
+        const { plugins } = req.body;
+        
+        if (!plugins || typeof plugins !== 'object') {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid request: plugins object required'
+          });
+        }
+
+        // Update all plugin manifest statuses
+        for (const [pluginId, enabled] of Object.entries(plugins)) {
+          const plugin = this.pluginManager.plugins.get(pluginId);
+          if (plugin) {
+            plugin.manifestEnabled = enabled;
+            console.log(`🔧 Plugin ${pluginId} manifest status: ${enabled ? 'enabled' : 'disabled'}`);
+          }
+        }
+        
+        // Regenerate manifest with new plugin selection
+        const StremioAdapter = require('./stremio-adapter');
+        const stremioAdapter = new StremioAdapter(this.pluginManager);
+        
+        const configHash = await stremioAdapter.generateConfigHash();
+        const manifest = await stremioAdapter.generateManifest(configHash);
+        
+        // Generate new manifest URL
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const newManifestUrl = `${baseUrl}/manifest.json?config=${configHash}`;
+        
+        res.json({
+          success: true,
+          message: 'Plugin selection saved successfully',
+          manifest: {
+            updated: true,
+            newUrl: newManifestUrl,
+            configHash: configHash
+          }
+        });
+
+      } catch (error) {
+        console.error('❌ Error saving plugin selection:', error);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to save plugin selection'
         });
       }
     });
