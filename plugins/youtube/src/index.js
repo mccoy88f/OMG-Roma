@@ -47,7 +47,7 @@ app.get('/plugin.json', (req, res) => {
     console.log('🔍 Current working directory:', process.cwd());
     console.log('📁 Files in current directory:', require('fs').readdirSync('.'));
     
-    const pluginInfo = require('./plugin.json');
+    const pluginInfo = require('../plugin.json');
     console.log('✅ Plugin info loaded successfully:', pluginInfo.id, pluginInfo.name);
     res.json(pluginInfo);
   } catch (error) {
