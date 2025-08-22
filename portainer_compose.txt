@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: 
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PLUGINS_DIR=/app/plugins
+      - CONFIG_DIR=/app/config
+    volumes:
+      # Path assoluti per Portainer - MODIFICA QUESTI PATH
+      - /opt/omg-roma/config:/app/config
+      - /opt/omg-roma/plugins:/app/plugins
+    depends_on:
+      - youtube-plugin
+    networks:
+      - omg-roma-network
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.omg-roma.rule=Host(`omg-roma.local`)"
+      - "traefik.http.services.omg-roma.loadbalancer.server.port=3100"
+
+  youtube-plugin:
+    build: 
+      context: .
+      dockerfile: plugins/youtube/Dockerfile
+    environment:
+      - PORT=3001
+      - CONFIG_FILE=/app/config.json
+    volumes:
+      # Path assoluto per Portainer - MODIFICA QUESTO PATH
+      - /opt/omg-roma/config/youtube.config.json:/app/config.json:ro
+    networks:
+      - omg-roma-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  omg-roma-network:
+    driver: bridge
+    name: omg-roma-network
+
+volumes:
+  omg-roma-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/omg-roma/config
