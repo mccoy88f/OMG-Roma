@@ -116,8 +116,8 @@ function showConfigModal(pluginId, config, schema) {
                 `).join('')}
             </form>
             <div style="margin-top: 20px; text-align: right;">
-                <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
-                <button class="btn" onclick="saveConfig('${pluginId}')">💾 Salva</button>
+                <button class="btn btn-secondary" data-action="close-modal">Annulla</button>
+                <button class="btn" data-action="save-config" data-plugin-id="${pluginId}">💾 Salva</button>
             </div>
         </div>
     `;
@@ -257,6 +257,33 @@ function showNotification(message, type) {
 
 // Auto-refresh dashboard every 30 seconds
 setInterval(loadDashboard, 30000);
+
+// Event listener for buttons (CSP-compliant)
+document.addEventListener('click', function(event) {
+    const action = event.target.getAttribute('data-action');
+    const pluginId = event.target.getAttribute('data-plugin-id');
+    
+    switch(action) {
+        case 'configure':
+            if (pluginId) configurePlugin(pluginId);
+            break;
+        case 'test':
+            if (pluginId) testPlugin(pluginId);
+            break;
+        case 'copy-manifest':
+            copyManifestUrl();
+            break;
+        case 'open-stremio':
+            openStremio();
+            break;
+        case 'close-modal':
+            closeModal();
+            break;
+        case 'save-config':
+            if (pluginId) saveConfig(pluginId);
+            break;
+    }
+});
 
 // Load dashboard on page load
 document.addEventListener('DOMContentLoaded', loadDashboard);
