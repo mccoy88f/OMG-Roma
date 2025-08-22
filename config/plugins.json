@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "youtube": {
+      "enabled": true,
+      "container": "youtube-plugin",
+      "port": 3001
+    }
+  },
+  "last_updated": "2024-01-01T00:00:00.000Z"
+}
