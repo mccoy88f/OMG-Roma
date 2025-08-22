@@ -29,6 +29,39 @@ class PluginManager {
   }
 
   async loadPluginRegistry() {
+    console.log(`🔍 Looking for plugin registry at: ${this.registryFile}`);
+    console.log(`📂 Config directory: ${this.configDir}`);
+    
+    // Debug: List all files in config directory
+    try {
+      const configFiles = await fs.readdir(this.configDir);
+      console.log(`📁 Files in config directory:`, configFiles);
+    } catch (dirError) {
+      console.log(`❌ Config directory not accessible: ${dirError.message}`);
+    }
+    
+    // Debug: Check if the specific file exists
+    try {
+      const fileExists = await fs.pathExists(this.registryFile);
+      console.log(`📄 Registry file exists: ${fileExists}`);
+      
+      if (fileExists) {
+        const fileStat = await fs.stat(this.registryFile);
+        console.log(`📊 File stats:`, {
+          size: fileStat.size,
+          isFile: fileStat.isFile(),
+          isDirectory: fileStat.isDirectory(),
+          modified: fileStat.mtime
+        });
+        
+        // Try to read the raw content
+        const rawContent = await fs.readFile(this.registryFile, 'utf8');
+        console.log(`📝 Raw file content:`, rawContent);
+      }
+    } catch (statError) {
+      console.log(`❌ Cannot stat registry file: ${statError.message}`);
+    }
+    
     try {
       if (await fs.pathExists(this.registryFile)) {
         const registry = await fs.readJson(this.registryFile);
@@ -41,12 +74,20 @@ class PluginManager {
     }
     
     // Create default registry
+    console.log(`📝 Creating default plugin registry at: ${this.registryFile}`);
     const defaultRegistry = {
       plugins: {},
       last_updated: new Date().toISOString()
     };
-    await fs.writeJson(this.registryFile, defaultRegistry, { spaces: 2 });
-    console.log(`📝 Created default plugin registry`);
+    
+    try {
+      await fs.ensureDir(path.dirname(this.registryFile));
+      await fs.writeJson(this.registryFile, defaultRegistry, { spaces: 2 });
+      console.log(`✅ Created default plugin registry`);
+    } catch (writeError) {
+      console.error(`❌ Failed to create default registry: ${writeError.message}`);
+    }
+    
     return defaultRegistry;
   }
 
