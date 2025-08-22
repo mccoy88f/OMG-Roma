@@ -43,7 +43,7 @@ async function initializeServices() {
 // Plugin info endpoint
 app.get('/plugin.json', (req, res) => {
   try {
-    const pluginInfo = require('../plugin.json');
+    const pluginInfo = require('./plugin.json');
     res.json(pluginInfo);
   } catch (error) {
     res.status(404).json({ error: 'Plugin info not found' });
