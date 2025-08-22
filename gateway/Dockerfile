@@ -12,14 +12,13 @@ RUN apt-get update \
 # Create app directory
 WORKDIR /app
 
-# DEBUG: Show repository structure
-RUN echo "=== REPOSITORY STRUCTURE ===" && \
-    find . -name "*.json" | head -20
-
-# Copy package files
+# Copy package files (with fallback if package-lock.json missing)
 COPY gateway/package*.json ./
 
-# Install npm dependencies
+# Debug: List copied files
+RUN ls -la /app/
+
+# Install npm dependencies with fallback
 RUN if [ -f package-lock.json ]; then \
       echo "🔒 Using npm ci (package-lock.json found)"; \
       npm ci --only=production --no-audit --no-fund; \
@@ -32,21 +31,19 @@ RUN if [ -f package-lock.json ]; then \
 COPY gateway/src/ ./src/
 COPY gateway/public/ ./public/
 
-# Create directories
+# Create config directory
 RUN mkdir -p /app/config /app/plugins
 
-# DEBUG: Check if plugins.json exists in repo
-RUN echo "=== CHECKING PLUGINS.JSON ===" && \
-    ls -la config/ || echo "❌ config/ directory not found" && \
-    cat config/plugins.json || echo "❌ config/plugins.json not found"
-
-# Copy plugins registry from repository
+# Copy plugins registry from repository (ABSOLUTE PATH)
 COPY config/plugins.json /app/config/plugins.json
 
-# DEBUG: Verify copy worked
-RUN echo "=== VERIFY COPY ===" && \
-    ls -la /app/config/ && \
-    cat /app/config/plugins.json
+# Verify the copy worked and show content
+RUN echo "📂 Verifying plugins.json copy:" && \
+    ls -la /app/config/plugins.json && \
+    echo "📄 Content verification:" && \
+    cat /app/config/plugins.json && \
+    echo "📊 Size should be > 100 bytes:" && \
+    wc -c /app/config/plugins.json
 
 # Create health check script inline
 RUN echo '#!/bin/bash\nresponse=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/health)\nif [ "$response" = "200" ]; then\n    echo "✅ OMG-Roma Gateway is healthy"\n    exit 0\nelse\n    echo "❌ OMG-Roma Gateway health check failed (HTTP: $response)"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
