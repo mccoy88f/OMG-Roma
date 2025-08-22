@@ -32,28 +32,76 @@ class PluginManager {
     console.log(`🔍 Looking for plugin registry at: ${this.registryFile}`);
     
     try {
-      const fileExists = await fs.pathExists(this.registryFile);
+      let registryContent = null;
       
-      if (!fileExists) {
-        const error = `❌ FATAL: Plugin registry not found at ${this.registryFile}`;
-        console.error(error);
-        console.error(`📋 OMG-Roma requires a plugins.json file to work!`);
-        console.error(`🔧 Create config/plugins.json with at least one plugin configured.`);
-        throw new Error(error);
+      // Try to read local file first
+      if (await fs.pathExists(this.registryFile)) {
+        console.log(`📄 Local plugins.json found, reading...`);
+        try {
+          registryContent = await fs.readFile(this.registryFile, 'utf8');
+          console.log(`📝 Local file content (first 100 chars):`, registryContent.substring(0, 100));
+          
+          // Check if it's a valid, non-empty file
+          const testParse = JSON.parse(registryContent);
+          if (!testParse.plugins || Object.keys(testParse.plugins).length === 0) {
+            console.log(`⚠️  Local file is empty or invalid, will try GitHub fallback`);
+            registryContent = null;
+          } else {
+            console.log(`✅ Local file is valid with ${Object.keys(testParse.plugins).length} plugins`);
+          }
+        } catch (localError) {
+          console.log(`❌ Local file is corrupted: ${localError.message}`);
+          registryContent = null;
+        }
+      } else {
+        console.log(`📄 Local plugins.json not found`);
       }
       
-      // Read and parse the file
-      const rawContent = await fs.readFile(this.registryFile, 'utf8');
-      console.log(`📝 Raw registry content:`, rawContent);
+      // Fallback: Download from GitHub if local file is missing or invalid
+      if (!registryContent) {
+        console.log(`🌐 Downloading plugins.json from GitHub...`);
+        const githubUrl = 'https://raw.githubusercontent.com/mccoy88f/OMG-Roma/refs/heads/main/config/plugins.json';
+        
+        try {
+          const axios = require('axios');
+          const response = await axios.get(githubUrl, { timeout: 10000 });
+          registryContent = response.data;
+          
+          // Validate downloaded content
+          if (typeof registryContent === 'object') {
+            registryContent = JSON.stringify(registryContent, null, 2);
+          }
+          
+          console.log(`✅ Downloaded from GitHub successfully`);
+          console.log(`📝 Downloaded content (first 100 chars):`, registryContent.substring(0, 100));
+          
+          // Save to local file for future use
+          try {
+            await fs.ensureDir(path.dirname(this.registryFile));
+            await fs.writeFile(this.registryFile, registryContent, 'utf8');
+            console.log(`💾 Saved GitHub version to local file`);
+          } catch (saveError) {
+            console.log(`⚠️  Could not save to local file: ${saveError.message}`);
+            // Continue anyway, we have the content in memory
+          }
+          
+        } catch (downloadError) {
+          const error = `❌ FATAL: Cannot download plugins.json from GitHub: ${downloadError.message}`;
+          console.error(error);
+          console.error(`🌐 GitHub URL: ${githubUrl}`);
+          console.error(`🛑 OMG-Roma cannot start without plugin configuration`);
+          throw new Error(error);
+        }
+      }
       
+      // Parse the registry content
       let registry;
       try {
-        registry = JSON.parse(rawContent);
+        registry = JSON.parse(registryContent);
       } catch (jsonError) {
         const error = `❌ FATAL: Invalid JSON in plugin registry: ${jsonError.message}`;
         console.error(error);
-        console.error(`🔧 Fix the JSON syntax in: ${this.registryFile}`);
-        console.error(`📄 Content that failed to parse:`, rawContent);
+        console.error(`📄 Content that failed to parse:`, registryContent.substring(0, 200));
         throw new Error(error);
       }
       
@@ -70,7 +118,7 @@ class PluginManager {
         const error = `❌ FATAL: No plugins configured in registry`;
         console.error(error);
         console.error(`📋 OMG-Roma needs at least one plugin to work!`);
-        console.error(`🔧 Add plugins to config/plugins.json`);
+        console.error(`🔧 Add plugins to the GitHub repository config/plugins.json`);
         throw new Error(error);
       }
       
@@ -82,7 +130,7 @@ class PluginManager {
     } catch (error) {
       console.error(`💥 PLUGIN REGISTRY ERROR: ${error.message}`);
       console.error(`🛑 OMG-Roma cannot start without valid plugin configuration`);
-      console.error(`📚 See documentation: https://github.com/mccoy88f/OMG-Roma`);
+      console.error(`📚 Check repository: https://github.com/mccoy88f/OMG-Roma/blob/main/config/plugins.json`);
       
       // Exit the process - no point in continuing without plugins
       process.exit(1);
