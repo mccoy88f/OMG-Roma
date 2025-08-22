@@ -43,16 +43,6 @@ async function initializeServices() {
 // Plugin info endpoint
 app.get('/plugin.json', (req, res) => {
   try {
-    const pluginInfo = require('./plugin.json');
-    res.json(pluginInfo);
-  } catch (error) {
-    res.status(404).json({ error: 'Plugin info not found' });
-  }
-});
-
-// Plugin info endpoint
-app.get('/plugin.json', (req, res) => {
-  try {
     console.log('📄 Plugin info endpoint called');
     console.log('🔍 Current working directory:', process.cwd());
     console.log('📁 Files in current directory:', require('fs').readdirSync('.'));
