@@ -7,6 +7,10 @@ RUN apt-get update \
     curl \
     bash \
     git \
+    python3 \
+    python3-pip \
+    ffmpeg \
+  && pip3 install --upgrade yt-dlp \
   && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -32,7 +36,7 @@ COPY gateway/src/ ./src/
 COPY gateway/public/ ./public/
 
 # Create config directory FIRST
-RUN mkdir -p /app/config /app/plugins
+RUN mkdir -p /app/config /app/plugins /app/cache/ytdlp /app/cache/proxy
 
 # Try multiple approaches to copy the file
 # Approach 1: Direct copy

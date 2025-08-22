@@ -6,6 +6,7 @@ const path = require('path');
 const PluginManager = require('./plugin-manager');
 const StremioAdapter = require('./stremio-adapter');
 const WebUI = require('./web-ui');
+const StreamingManager = require('./streaming-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -30,6 +31,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 const pluginManager = new PluginManager();
 const stremioAdapter = new StremioAdapter(pluginManager);
 const webUI = new WebUI(pluginManager);
+const streamingManager = new StreamingManager();
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -121,6 +123,124 @@ app.get('/stream/:type/:id.json', async (req, res) => {
   }
 });
 
+// Streaming API endpoints
+app.get('/api/streaming/:pluginId/search', async (req, res) => {
+  try {
+    const { pluginId } = req.params;
+    const { query, limit, skip, searchType, dateFilter, durationFilter } = req.query;
+    
+    const results = await streamingManager.searchVideos(pluginId, query, {
+      limit: parseInt(limit) || 20,
+      skip: parseInt(skip) || 0,
+      searchType,
+      dateFilter,
+      durationFilter
+    });
+    
+    res.json(results);
+  } catch (error) {
+    console.error('❌ Streaming search error:', error);
+    res.status(500).json({ error: 'Search failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/info/:videoId', async (req, res) => {
+  try {
+    const { pluginId, videoId } = req.params;
+    
+    const videoInfo = await streamingManager.getVideoInfo(pluginId, videoId);
+    res.json(videoInfo);
+  } catch (error) {
+    console.error('❌ Streaming info error:', error);
+    res.status(500).json({ error: 'Info failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/formats/:videoId', async (req, res) => {
+  try {
+    const { pluginId, videoId } = req.params;
+    const { source = 'youtube' } = req.query;
+    
+    const formats = await streamingManager.getStreamFormats(pluginId, videoId, source);
+    res.json(formats);
+  } catch (error) {
+    console.error('❌ Streaming formats error:', error);
+    res.status(500).json({ error: 'Formats failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/proxy/:videoId', async (req, res) => {
+  try {
+    const { pluginId, videoId } = req.params;
+    const { quality = 'best', format } = req.query;
+    
+    await streamingManager.streamVideo(pluginId, videoId, format, quality, req, res);
+  } catch (error) {
+    console.error('❌ Streaming proxy error:', error);
+    res.status(500).json({ error: 'Streaming failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/channel/:channelId', async (req, res) => {
+  try {
+    const { pluginId, channelId } = req.params;
+    const { limit = 20 } = req.query;
+    
+    const videos = await streamingManager.getChannelVideos(pluginId, channelId, {
+      limit: parseInt(limit) || 20
+    });
+    res.json(videos);
+  } catch (error) {
+    console.error('❌ Streaming channel error:', error);
+    res.status(500).json({ error: 'Channel failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/thumbnail/:videoId', async (req, res) => {
+  try {
+    const { pluginId, videoId } = req.params;
+    
+    await streamingManager.getThumbnail(pluginId, videoId, req, res);
+  } catch (error) {
+    console.error('❌ Streaming thumbnail error:', error);
+    res.status(500).json({ error: 'Thumbnail failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/subtitles/:videoId', async (req, res) => {
+  try {
+    const { pluginId, videoId } = req.params;
+    const { language = 'en' } = req.query;
+    
+    await streamingManager.getSubtitles(pluginId, videoId, language, req, res);
+  } catch (error) {
+    console.error('❌ Streaming subtitles error:', error);
+    res.status(500).json({ error: 'Subtitles failed', details: error.message });
+  }
+});
+
+// Streaming statistics
+app.get('/api/streaming/stats', (req, res) => {
+  try {
+    const stats = streamingManager.getGlobalStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Streaming stats error:', error);
+    res.status(500).json({ error: 'Stats failed', details: error.message });
+  }
+});
+
+app.get('/api/streaming/:pluginId/stats', (req, res) => {
+  try {
+    const { pluginId } = req.params;
+    const stats = streamingManager.getPluginStats(pluginId);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Plugin streaming stats error:', error);
+    res.status(500).json({ error: 'Plugin stats failed', details: error.message });
+  }
+});
+
 // Web UI routes
 app.use('/api', webUI.getRouter());
 app.get('/', (req, res) => {
@@ -132,10 +252,16 @@ async function startServer() {
   try {
     console.log('🚀 Starting OMG-Roma...');
     
+    // Initialize streaming manager
+    console.log('🎬 Initializing StreamingManager...');
+    await streamingManager.initialize();
+    
     // Initialize plugin manager
+    console.log('🔌 Initializing PluginManager...');
     await pluginManager.initialize();
     
     // Start discovering plugins
+    console.log('🔍 Discovering plugins...');
     await pluginManager.discoverPlugins();
     
     app.listen(PORT, '0.0.0.0', () => {
@@ -143,6 +269,7 @@ async function startServer() {
       console.log(`📱 Stremio manifest: http://localhost:${PORT}/manifest.json`);
       console.log(`⚙️  Web UI: http://localhost:${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`🎬 Streaming API: http://localhost:${PORT}/api/streaming`);
     });
     
   } catch (error) {
@@ -154,12 +281,14 @@ async function startServer() {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  await streamingManager.shutdown();
   await pluginManager.shutdown();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('🛑 Received SIGINT, shutting down gracefully...');
+  await streamingManager.shutdown();
   await pluginManager.shutdown();
   process.exit(0);
 });
