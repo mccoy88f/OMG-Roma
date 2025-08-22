@@ -32,7 +32,8 @@ class PluginManager {
     try {
       if (await fs.pathExists(this.registryFile)) {
         const registry = await fs.readJson(this.registryFile);
-        console.log(`📋 Loaded plugin registry with ${Object.keys(registry).length} plugins`);
+        console.log(`📋 Loaded plugin registry:`, JSON.stringify(registry, null, 2));
+        console.log(`📊 Found ${Object.keys(registry.plugins || {}).length} plugins in registry`);
         return registry;
       }
     } catch (error) {
@@ -45,6 +46,7 @@ class PluginManager {
       last_updated: new Date().toISOString()
     };
     await fs.writeJson(this.registryFile, defaultRegistry, { spaces: 2 });
+    console.log(`📝 Created default plugin registry`);
     return defaultRegistry;
   }
 
@@ -77,17 +79,22 @@ class PluginManager {
   async loadPluginFromRegistry(pluginId, pluginInfo) {
     try {
       console.log(`📦 Loading plugin from registry: ${pluginId}`);
+      console.log(`🔗 Plugin info:`, pluginInfo);
       
       // Get plugin config from the plugin container directly
       const baseUrl = `http://${pluginId}-plugin:${pluginInfo.port}`;
+      console.log(`🌐 Trying to connect to: ${baseUrl}`);
       
       // Try to get plugin.json from the container via HTTP
       let pluginConfig;
       try {
+        console.log(`📄 Fetching plugin config from ${baseUrl}/plugin.json`);
         const response = await axios.get(`${baseUrl}/plugin.json`, { timeout: 5000 });
         pluginConfig = response.data;
-        console.log(`📄 Retrieved plugin config for ${pluginId} via HTTP`);
+        console.log(`✅ Retrieved plugin config for ${pluginId} via HTTP`);
       } catch (httpError) {
+        console.error(`❌ HTTP error for ${pluginId}:`, httpError.message);
+        
         // Fallback: create basic config from registry info
         console.log(`⚠️  Could not fetch plugin.json via HTTP, using registry info`);
         pluginConfig = {
@@ -110,6 +117,8 @@ class PluginManager {
         };
       }
       
+      console.log(`🔧 Plugin config for ${pluginId}:`, JSON.stringify(pluginConfig, null, 2));
+      
       // Validate plugin config
       if (!this.validatePluginConfig(pluginConfig)) {
         console.error(`❌ Invalid plugin config for ${pluginId}`);
@@ -131,7 +140,7 @@ class PluginManager {
       return true;
       
     } catch (error) {
-      console.error(`❌ Error loading plugin ${pluginId}:`, error);
+      console.error(`❌ Error loading plugin ${pluginId}:`, error.message);
       return false;
     }
   }
