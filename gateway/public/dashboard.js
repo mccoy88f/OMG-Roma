@@ -63,8 +63,8 @@ function renderDashboard() {
             </div>
 
             <div style="margin-top: 15px;">
-                <button class="btn" onclick="configurePlugin('${plugin.id}')">⚙️ Configura</button>
-                <button class="btn btn-secondary" onclick="testPlugin('${plugin.id}')">🧪 Test</button>
+                <button class="btn" data-action="configure" data-plugin-id="${plugin.id}">⚙️ Configura</button>
+                <button class="btn btn-secondary" data-action="test" data-plugin-id="${plugin.id}">🧪 Test</button>
             </div>
         </div>
     `).join('');
