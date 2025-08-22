@@ -31,6 +31,9 @@ RUN if [ -f package-lock.json ]; then \
 COPY gateway/src/ ./src/
 COPY gateway/public/ ./public/
 
+# Copy plugins registry from repository
+COPY config/plugins.json ./config/plugins.json
+
 # Create directories
 RUN mkdir -p /app/config /app/plugins
 
