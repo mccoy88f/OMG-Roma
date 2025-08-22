@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: 
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PLUGINS_DIR=/app/plugins
+      - CONFIG_DIR=/app/config
+    volumes:
+      - omg_roma_config:/app/config
+      - omg_roma_plugins:/app/plugins
+    depends_on:
+      - youtube-plugin
+    networks:
+      - omg-roma-network
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
+
+  youtube-plugin:
+    build: 
+      context: .
+      dockerfile: plugins/youtube/Dockerfile
+    environment:
+      - PORT=3001
+      - CONFIG_FILE=/app/config.json
+    volumes:
+      - omg_roma_youtube_config:/app/config.json
+    networks:
+      - omg-roma-network
+    restart: unless-stopped
+
+networks:
+  omg-roma-network:
+    driver: bridge
+    name: omg-roma-network
+
+volumes:
+  omg_roma_config:
+    driver: local
+  omg_roma_plugins:
+    driver: local  
+  omg_roma_youtube_config:
+    driver: local
+
+# Note per Portainer:
+# 1. Assicurati che il repository abbia la struttura corretta
+# 2. Usa questo file come docker-compose.yml nella root
+# 3. I volumi sono managed da Docker (non bind mounts)
+# 4. Per la configurazione iniziale, accedi via exec ai container
