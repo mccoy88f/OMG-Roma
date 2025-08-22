@@ -1,12 +1,12 @@
-FROM node:18-alpine
+FROM node:20-bookworm-slim
 
-# Install system dependencies
-RUN apk add --no-cache \
+# Install system dependencies (seguendo approccio originale OMG-YouTube)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
     curl \
     bash \
-    && apk add --virtual .tmp-build-deps \
-    build-base \
-    && apk del .tmp-build-deps
+  && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
 WORKDIR /app
@@ -14,8 +14,8 @@ WORKDIR /app
 # Copy package files
 COPY gateway/package*.json ./
 
-# Install dependencies with better error handling
-RUN npm ci --only=production --no-audit --no-fund
+# Install npm dependencies
+RUN npm ci --only=production
 
 # Copy application code
 COPY gateway/src/ ./src/
@@ -28,8 +28,8 @@ RUN mkdir -p /app/config /app/plugins
 RUN echo '#!/bin/bash\nresponse=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/health)\nif [ "$response" = "200" ]; then\n    echo "✅ OMG-Roma Gateway is healthy"\n    exit 0\nelse\n    echo "❌ OMG-Roma Gateway health check failed (HTTP: $response)"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs --shell /bin/bash --create-home nodejs
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
