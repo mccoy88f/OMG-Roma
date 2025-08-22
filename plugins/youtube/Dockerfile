@@ -1,28 +1,16 @@
-FROM node:18-alpine
+FROM node:20-bookworm-slim
 
-# Install system dependencies and build tools
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    py3-setuptools \
-    py3-wheel \
+# Install system dependencies and yt-dlp (seguendo approccio originale OMG-YouTube)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
     ffmpeg \
+    python3 \
+    python3-pip \
     curl \
     bash \
-    gcc \
-    musl-dev \
-    python3-dev \
-    libffi-dev \
-    openssl-dev \
-    cargo \
-    rust
-
-# Install yt-dlp with build dependencies
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip3 install --no-cache-dir yt-dlp
-
-# Clean up build dependencies to reduce image size
-RUN apk del gcc musl-dev python3-dev libffi-dev openssl-dev cargo rust
+  && rm -rf /var/lib/apt/lists/* \
+  && pip3 install --no-cache-dir yt-dlp --break-system-packages
 
 # Create app directory
 WORKDIR /app
@@ -35,8 +23,6 @@ RUN npm ci --only=production
 
 # Copy application code
 COPY plugins/youtube/src/ ./src/
-
-# Copy plugin configuration
 COPY plugins/youtube/plugin.json ./
 
 # Create config directory
@@ -46,8 +32,8 @@ RUN mkdir -p /app/config
 RUN echo '#!/bin/bash\nresponse=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health)\nif [ "$response" = "200" ]; then\n    echo "✅ OMG-Roma YouTube Plugin is healthy"\n    exit 0\nelse\n    echo "❌ OMG-Roma YouTube Plugin health check failed (HTTP: $response)"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs --shell /bin/bash --create-home nodejs
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
