@@ -1,6 +1,6 @@
 FROM node:20-bookworm-slim
 
-# Install system dependencies and yt-dlp (seguendo approccio originale OMG-YouTube)
+# Install system dependencies and yt-dlp
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -9,17 +9,30 @@ RUN apt-get update \
     python3-pip \
     curl \
     bash \
+    git \
   && rm -rf /var/lib/apt/lists/* \
   && pip3 install --no-cache-dir yt-dlp --break-system-packages
+
+# Verify yt-dlp installation
+RUN yt-dlp --version
 
 # Create app directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files (with fallback if package-lock.json missing)
 COPY plugins/youtube/package*.json ./
 
-# Install npm dependencies
-RUN npm ci --only=production
+# Debug: List copied files
+RUN ls -la /app/
+
+# Install npm dependencies with fallback
+RUN if [ -f package-lock.json ]; then \
+      echo "🔒 Using npm ci (package-lock.json found)"; \
+      npm ci --only=production --no-audit --no-fund; \
+    else \
+      echo "📦 Using npm install (no package-lock.json)"; \
+      npm install --only=production --no-audit --no-fund; \
+    fi
 
 # Copy application code
 COPY plugins/youtube/src/ ./src/
