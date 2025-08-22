@@ -30,65 +30,63 @@ class PluginManager {
 
   async loadPluginRegistry() {
     console.log(`🔍 Looking for plugin registry at: ${this.registryFile}`);
-    console.log(`📂 Config directory: ${this.configDir}`);
     
-    // Debug: List all files in config directory
-    try {
-      const configFiles = await fs.readdir(this.configDir);
-      console.log(`📁 Files in config directory:`, configFiles);
-    } catch (dirError) {
-      console.log(`❌ Config directory not accessible: ${dirError.message}`);
-    }
-    
-    // Debug: Check if the specific file exists
     try {
       const fileExists = await fs.pathExists(this.registryFile);
-      console.log(`📄 Registry file exists: ${fileExists}`);
       
-      if (fileExists) {
-        const fileStat = await fs.stat(this.registryFile);
-        console.log(`📊 File stats:`, {
-          size: fileStat.size,
-          isFile: fileStat.isFile(),
-          isDirectory: fileStat.isDirectory(),
-          modified: fileStat.mtime
-        });
-        
-        // Try to read the raw content
-        const rawContent = await fs.readFile(this.registryFile, 'utf8');
-        console.log(`📝 Raw file content:`, rawContent);
+      if (!fileExists) {
+        const error = `❌ FATAL: Plugin registry not found at ${this.registryFile}`;
+        console.error(error);
+        console.error(`📋 OMG-Roma requires a plugins.json file to work!`);
+        console.error(`🔧 Create config/plugins.json with at least one plugin configured.`);
+        throw new Error(error);
       }
-    } catch (statError) {
-      console.log(`❌ Cannot stat registry file: ${statError.message}`);
-    }
-    
-    try {
-      if (await fs.pathExists(this.registryFile)) {
-        const registry = await fs.readJson(this.registryFile);
-        console.log(`📋 Loaded plugin registry:`, JSON.stringify(registry, null, 2));
-        console.log(`📊 Found ${Object.keys(registry.plugins || {}).length} plugins in registry`);
-        return registry;
+      
+      // Read and parse the file
+      const rawContent = await fs.readFile(this.registryFile, 'utf8');
+      console.log(`📝 Raw registry content:`, rawContent);
+      
+      let registry;
+      try {
+        registry = JSON.parse(rawContent);
+      } catch (jsonError) {
+        const error = `❌ FATAL: Invalid JSON in plugin registry: ${jsonError.message}`;
+        console.error(error);
+        console.error(`🔧 Fix the JSON syntax in: ${this.registryFile}`);
+        console.error(`📄 Content that failed to parse:`, rawContent);
+        throw new Error(error);
       }
+      
+      // Validate registry structure
+      if (!registry.plugins || typeof registry.plugins !== 'object') {
+        const error = `❌ FATAL: Plugin registry missing 'plugins' object`;
+        console.error(error);
+        console.error(`📋 Expected format: {"plugins": {"youtube": {...}}, "last_updated": "..."}`);
+        throw new Error(error);
+      }
+      
+      const pluginCount = Object.keys(registry.plugins).length;
+      if (pluginCount === 0) {
+        const error = `❌ FATAL: No plugins configured in registry`;
+        console.error(error);
+        console.error(`📋 OMG-Roma needs at least one plugin to work!`);
+        console.error(`🔧 Add plugins to config/plugins.json`);
+        throw new Error(error);
+      }
+      
+      console.log(`✅ Valid plugin registry loaded`);
+      console.log(`📊 Found ${pluginCount} plugins configured:`, Object.keys(registry.plugins));
+      
+      return registry;
+      
     } catch (error) {
-      console.error('❌ Error loading plugin registry:', error);
+      console.error(`💥 PLUGIN REGISTRY ERROR: ${error.message}`);
+      console.error(`🛑 OMG-Roma cannot start without valid plugin configuration`);
+      console.error(`📚 See documentation: https://github.com/mccoy88f/OMG-Roma`);
+      
+      // Exit the process - no point in continuing without plugins
+      process.exit(1);
     }
-    
-    // Create default registry
-    console.log(`📝 Creating default plugin registry at: ${this.registryFile}`);
-    const defaultRegistry = {
-      plugins: {},
-      last_updated: new Date().toISOString()
-    };
-    
-    try {
-      await fs.ensureDir(path.dirname(this.registryFile));
-      await fs.writeJson(this.registryFile, defaultRegistry, { spaces: 2 });
-      console.log(`✅ Created default plugin registry`);
-    } catch (writeError) {
-      console.error(`❌ Failed to create default registry: ${writeError.message}`);
-    }
-    
-    return defaultRegistry;
   }
 
   async discoverPlugins() {
