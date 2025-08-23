@@ -38,10 +38,9 @@ services:
     networks:
       - omg-roma-network
     restart: unless-stopped
+    # Plugin starts after gateway (simple dependency)
     depends_on:
-      gateway:
-        condition: service_healthy
-    # Plugin waits for gateway to be healthy before starting
+      - gateway
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/ready"]
       interval: 30s

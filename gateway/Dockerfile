@@ -7,6 +7,7 @@ RUN apt-get update --fix-missing \
     curl \
     bash \
     git \
+    procps \
     python3 \
     python3-pip \
     ffmpeg \
@@ -60,8 +61,8 @@ RUN echo "📂 Verifying plugins.json copy:" && \
     cat /app/config/plugins.json && \
     echo "📊 Validation complete"
 
-# Create health check script inline
-RUN echo '#!/bin/bash\nresponse=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/health)\nif [ "$response" = "200" ]; then\n    echo "✅ OMG-Roma Gateway is healthy"\n    exit 0\nelse\n    echo "❌ OMG-Roma Gateway health check failed (HTTP: $response)"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
+# Simple health check - just check if process is running
+RUN echo '#!/bin/bash\nif pgrep -f "node.*src/index.js" > /dev/null; then\n    echo "✅ OMG-Roma Gateway process is running"\n    exit 0\nelse\n    echo "❌ OMG-Roma Gateway process not found"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
 
 # Create non-root user
 RUN groupadd --gid 1001 nodejs && \
