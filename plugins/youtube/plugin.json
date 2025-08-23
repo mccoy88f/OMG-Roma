@@ -22,8 +22,6 @@
   },
   
   "stremio": {
-    "search_catalog_name": "Ricerca YouTube",
-    "search_catalog_id": "youtube_search",
     "discover_catalog_name": "YouTube", 
     "discover_catalog_id": "youtube_channels"
   },
