@@ -287,7 +287,14 @@ app.post('/meta', async (req, res) => {
   try {
     const { videoId, api_key } = req.body;
     
-    console.log(`📝 Getting meta for: ${videoId}`);
+    // Handle Stremio format: youtube:videoId -> videoId
+    const cleanVideoId = videoId && videoId.includes(':') ? videoId.split(':')[1] : videoId;
+    
+    console.log(`📝 Getting meta for: ${videoId} (cleaned: ${cleanVideoId})`);
+    
+    if (!cleanVideoId) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
     
     // Use API key from request if provided, otherwise from config
     const metaApiKey = api_key || req.body.api_key || config.get('api_key');
@@ -300,7 +307,7 @@ app.post('/meta', async (req, res) => {
     
     try {
       // Get video metadata using YouTube API
-      const video = await tempYouTubeAPI.getVideoInfo(videoId);
+      const video = await tempYouTubeAPI.getVideoInfo(cleanVideoId);
       console.log(`✅ Meta retrieved for: ${video.title}`);
       
       // Convert to Stremio meta format
@@ -334,14 +341,21 @@ app.post('/meta', async (req, res) => {
       details: error.message 
     });
   }
-});
+ });
 
 // Meta endpoint for Stremio (GET method)
 app.get('/meta/:videoId.json', async (req, res) => {
   try {
     const { videoId } = req.params;
     
-    console.log(`📝 Getting meta for: ${videoId} (GET)`);
+    // Handle Stremio format: youtube:videoId -> videoId
+    const cleanVideoId = videoId && videoId.includes(':') ? videoId.split(':')[1] : videoId;
+    
+    console.log(`📝 Getting meta for: ${videoId} (GET) (cleaned: ${cleanVideoId})`);
+    
+    if (!cleanVideoId) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
     
     // Use API key from query if provided, otherwise from config
     const metaApiKey = req.query.api_key || req.query.youtube_api_key || config.get('api_key');
@@ -354,7 +368,7 @@ app.get('/meta/:videoId.json', async (req, res) => {
     
     try {
       // Get video metadata using YouTube API
-      const video = await tempYouTubeAPI.getVideoInfo(videoId);
+      const video = await tempYouTubeAPI.getVideoInfo(cleanVideoId);
       console.log(`✅ Meta retrieved for: ${video.title}`);
       
       // Convert to Stremio meta format
@@ -395,11 +409,18 @@ app.post('/stream', async (req, res) => {
   try {
     const { videoId } = req.body;
     
-    console.log(`🎬 Getting streams for: ${videoId}`);
+    // Handle Stremio format: youtube:videoId -> videoId
+    const cleanVideoId = videoId && videoId.includes(':') ? videoId.split(':')[1] : videoId;
+    
+    console.log(`🎬 Getting streams for: ${videoId} (cleaned: ${cleanVideoId})`);
+    
+    if (!cleanVideoId) {
+      return res.status(400).json({ error: 'Invalid video ID', streams: [] });
+    }
     
     // Get multiple format options from gateway yt-dlp service
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${cleanVideoId}`);
     
     if (response.ok) {
       const data = await response.json();
@@ -407,54 +428,48 @@ app.post('/stream', async (req, res) => {
       // Create multiple stream options with different qualities
       const streams = [];
       
-      // Handle formats returned by gateway (bestvideo+bestaudio)
+      // Handle formats returned by gateway - Create single combined stream like OMG-youtube
       if (data && Array.isArray(data)) {
-        // Gateway returns array of format objects with bestvideo+bestaudio
-        data.forEach(format => {
-          if (format.url) {
-            // Get video info for better naming
-            let videoTitle = 'Unknown Video';
-            let channelName = 'Unknown Author';
-            
-            // Try to extract video info from the format data
-            if (format.video_title) {
-              videoTitle = format.video_title;
-            }
-            if (format.channel_name) {
-              channelName = format.channel_name;
-            }
-            
-            // Create descriptive names with OMG-Roma format
-            let quality = format.quality || 'Unknown Quality';
-            if (format.height) {
-              quality = `${format.height}p`;
-            }
-            
-            // Format: OMG-Roma: [Plugin] - [Video] ([Author]) - [Quality]
-            let name = `OMG-Roma: YouTube - ${videoTitle} (${channelName}) - ${quality}`;
-            
-            // Add type indicators
-            if (format.type === 'combined') {
-              name += ' 🎬 Combined';
-            } else if (format.type === 'video') {
-              name += ' 🎬 Video Only';
-            } else if (format.type === 'audio') {
-              name += ' 🎵 Audio Only';
-            } else {
-              name += ' 📺 Stream';
-            }
-            
-            streams.push({
-              name: name,
-              url: format.url,
-              quality: format.quality || 'unknown',
-              type: format.type || 'video',
-              height: format.height || 0,
-              width: format.width || 0,
-              ext: format.ext || 'mp4'
-            });
-          }
+        // Get video info for naming
+        let videoTitle = 'Unknown Video';
+        let channelName = 'Unknown Author';
+        let bestQuality = 'Unknown Quality';
+        
+        // Try to extract video info from the first format
+        if (data[0] && data[0].video_title) {
+          videoTitle = data[0].video_title;
+        }
+        if (data[0] && data[0].channel_name) {
+          channelName = data[0].channel_name;
+        }
+        
+        // Find best quality from available formats
+        const videoFormats = data.filter(f => f.type === 'video' && f.height);
+        if (videoFormats.length > 0) {
+          const bestVideo = videoFormats.reduce((best, current) => 
+            (current.height || 0) > (best.height || 0) ? current : best
+          );
+          bestQuality = `${bestVideo.height}p`;
+        }
+        
+        // Create single combined stream using gateway proxy (like OMG-youtube)
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        const combinedUrl = `${gatewayUrl}/api/streaming/youtube/proxy/${cleanVideoId}?quality=best`;
+        
+        // Single stream with OMG-Roma format
+        const name = `OMG-Roma: YouTube - ${videoTitle} (${channelName}) - ${bestQuality} 🎬 Combined`;
+        
+        streams.push({
+          name: name,
+          url: combinedUrl,
+          quality: bestQuality,
+          type: 'combined',
+          height: videoFormats[0]?.height || 0,
+          width: videoFormats[0].width || 0,
+          ext: 'mp4'
         });
+        
+        console.log(`✅ Created single combined stream: ${name}`);
       }
       
       // Fallback: if no formats found, create proxy stream
@@ -468,7 +483,7 @@ app.post('/stream', async (req, res) => {
         });
       }
       
-      console.log(`✅ Found ${streams.length} stream options for: ${videoId}`);
+      console.log(`✅ Found ${streams.length} stream options for: ${cleanVideoId}`);
       res.json({ streams });
     } else {
       console.warn(`⚠️  Gateway error for streams: ${response.status}`);
@@ -490,11 +505,18 @@ app.get('/stream/:videoId.json', async (req, res) => {
   try {
     const { videoId } = req.params;
     
-    console.log(`🎬 Getting streams for: ${videoId} (GET)`);
+    // Handle Stremio format: youtube:videoId -> videoId
+    const cleanVideoId = videoId && videoId.includes(':') ? videoId.split(':')[1] : videoId;
+    
+    console.log(`🎬 Getting streams for: ${videoId} (GET) (cleaned: ${cleanVideoId})`);
+    
+    if (!cleanVideoId) {
+      return res.status(400).json({ error: 'Invalid video ID', streams: [] });
+    }
     
     // Get multiple format options from gateway yt-dlp service
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${cleanVideoId}`);
     
     if (response.ok) {
       const data = await response.json();
@@ -502,54 +524,48 @@ app.get('/stream/:videoId.json', async (req, res) => {
       // Create multiple stream options with different qualities
       const streams = [];
       
-      // Handle formats returned by gateway (bestvideo+bestaudio)
+      // Handle formats returned by gateway - Create single combined stream like OMG-youtube
       if (data && Array.isArray(data)) {
-        // Gateway returns array of format objects with bestvideo+bestaudio
-        data.forEach(format => {
-          if (format.url) {
-            // Get video info for better naming
-            let videoTitle = 'Unknown Video';
-            let channelName = 'Unknown Author';
-            
-            // Try to extract video info from the format data
-            if (format.video_title) {
-              videoTitle = format.video_title;
-            }
-            if (format.channel_name) {
-              channelName = format.channel_name;
-            }
-            
-            // Create descriptive names with OMG-Roma format
-            let quality = format.quality || 'Unknown Quality';
-            if (format.height) {
-              quality = `${format.height}p`;
-            }
-            
-            // Format: OMG-Roma: [Plugin] - [Video] ([Author]) - [Quality]
-            let name = `OMG-Roma: YouTube - ${videoTitle} (${channelName}) - ${quality}`;
-            
-            // Add type indicators
-            if (format.type === 'combined') {
-              name += ' 🎬 Combined';
-            } else if (format.type === 'video') {
-              name += ' 🎬 Video Only';
-            } else if (format.type === 'audio') {
-              name += ' 🎵 Audio Only';
-            } else {
-              name += ' 📺 Stream';
-            }
-            
-            streams.push({
-              name: name,
-              url: format.url,
-              quality: format.quality || 'unknown',
-              type: format.type || 'video',
-              height: format.height || 0,
-              width: format.width || 0,
-              ext: format.ext || 'mp4'
-            });
-          }
+        // Get video info for naming
+        let videoTitle = 'Unknown Video';
+        let channelName = 'Unknown Author';
+        let bestQuality = 'Unknown Quality';
+        
+        // Try to extract video info from the first format
+        if (data[0] && data[0].video_title) {
+          videoTitle = data[0].video_title;
+        }
+        if (data[0] && data[0].channel_name) {
+          channelName = data[0].channel_name;
+        }
+        
+        // Find best quality from available formats
+        const videoFormats = data.filter(f => f.type === 'video' && f.height);
+        if (videoFormats.length > 0) {
+          const bestVideo = videoFormats.reduce((best, current) => 
+            (current.height || 0) > (best.height || 0) ? current : best
+          );
+          bestQuality = `${bestVideo.height}p`;
+        }
+        
+        // Create single combined stream using gateway proxy (like OMG-youtube)
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        const combinedUrl = `${gatewayUrl}/api/streaming/youtube/proxy/${cleanVideoId}?quality=best`;
+        
+        // Single stream with OMG-Roma format
+        const name = `OMG-Roma: YouTube - ${videoTitle} (${channelName}) - ${bestQuality} 🎬 Combined`;
+        
+        streams.push({
+          name: name,
+          url: combinedUrl,
+          quality: bestQuality,
+          type: 'combined',
+          height: videoFormats[0]?.height || 0,
+          width: videoFormats[0]?.width || 0,
+          ext: 'mp4'
         });
+        
+        console.log(`✅ Created single combined stream: ${name}`);
       }
       
       // Fallback: if no formats found, create proxy stream
@@ -557,13 +573,13 @@ app.get('/stream/:videoId.json', async (req, res) => {
         const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
         streams.push({
           name: `OMG-Roma: YouTube - Unknown Video (Unknown Author) - Best Available 📺 Proxy`,
-          url: `${gatewayUrl}/api/streaming/youtube/proxy/${videoId}?quality=best`,
+          url: `${gatewayUrl}/api/streaming/youtube/proxy/${cleanVideoId}?quality=best`,
           quality: 'best',
           type: 'proxy'
         });
       }
       
-      console.log(`✅ Found ${streams.length} stream options for: ${videoId}`);
+      console.log(`✅ Found ${streams.length} stream options for: ${cleanVideoId}`);
       res.json({ streams });
     } else {
       console.warn(`⚠️  Gateway error for streams: ${response.status}`);
@@ -575,7 +591,7 @@ app.get('/stream/:videoId.json', async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to get video streams', 
       details: error.message,
-      streams: [] 
+      streams: []
     });
   }
 });
@@ -826,13 +842,13 @@ app.get('/channels', async (req, res) => {
   }
 });
 
-// YouTube catalog endpoint for Stremio
-app.get('/catalog/youtube/:channelId/:extra?.json', async (req, res) => {
+// YouTube channels catalog endpoint for Stremio (general catalog with filters)
+app.get('/catalog/channels/YouTube/:extra?.json', async (req, res) => {
   try {
-    const { channelId, extra } = req.params;
-    const { skip = 0, limit = 20 } = req.query;
+    const { extra } = req.params;
+    const { skip = 0, limit = 20, filter } = req.query;
     
-    console.log(`📺 Channel catalog request: ${channelId} (skip: ${skip}, limit: ${limit})`);
+    console.log(`📺 YouTube channels catalog request (skip: ${skip}, limit: ${limit}, filter: ${filter || 'all'})`);
     
     // Use API key from query if provided, otherwise from config
     const apiKey = req.query.api_key || req.query.youtube_api_key || config.get('api_key');
@@ -843,36 +859,123 @@ app.get('/catalog/youtube/:channelId/:extra?.json', async (req, res) => {
     // Create temporary YouTube API instance
     const tempYouTubeAPI = new YouTubeAPI(apiKey);
     
-    // Get channel info
-    const channelInfo = await tempYouTubeAPI.getChannelInfo(channelId);
-    console.log(`✅ Channel info: ${channelInfo.title}`);
+    // Get followed channels from config
+    const followedChannels = config.get('followed_channels', []);
     
-    // Get channel videos
-    const channelResult = await tempYouTubeAPI.getChannelVideos(channelId, { skip, limit });
+    if (followedChannels.length === 0) {
+      console.log('⚠️  No followed channels configured');
+      return res.json({ metas: [], hasMore: false });
+    }
     
-    // Convert to Stremio catalog format
-    const catalog = {
-      metas: channelResult.videos.map(video => ({
-        id: video.id,
-        name: video.title,
-        description: video.description,
-        poster: video.thumbnail,
-        background: video.thumbnail,
-        type: 'movie',
-        releaseInfo: video.publishedAt,
-        runtime: video.duration,
-        youtube: {
-          channelId: video.channelId,
-          channelTitle: video.channel,
-          viewCount: video.viewCount,
-          likeCount: video.likeCount
+    let allVideos = [];
+    
+    if (filter) {
+      // Filter by specific channel
+      const cleanChannelId = filter.includes(':') ? filter.split(':')[1] : filter;
+      
+      console.log(`🎯 Filtering by channel: ${cleanChannelId}`);
+      
+      try {
+        const channelResult = await tempYouTubeAPI.getChannelVideos(cleanChannelId, { skip, limit });
+        allVideos = channelResult.videos;
+        
+        // Convert to Stremio catalog format
+        const catalog = {
+          metas: allVideos.map(video => ({
+            id: video.id,
+            name: video.title,
+            description: video.description,
+            poster: video.thumbnail,
+            background: video.thumbnail,
+            type: 'movie',
+            releaseInfo: video.publishedAt,
+            runtime: video.duration,
+            youtube: {
+              channelId: video.channelId,
+              channelTitle: video.channel,
+              viewCount: video.viewCount,
+              likeCount: video.likeCount
+            }
+          })),
+          hasMore: channelResult.hasMore
+        };
+        
+        console.log(`✅ Filtered catalog: ${catalog.metas.length} videos from channel ${cleanChannelId}`);
+        res.json(catalog);
+        
+      } catch (error) {
+        console.error(`❌ Error filtering by channel ${cleanChannelId}:`, error);
+        res.status(500).json({ 
+          error: 'Channel filter failed', 
+          details: error.message,
+          metas: [],
+          hasMore: false
+        });
+      }
+      
+    } else {
+      // Show videos from all followed channels
+      console.log(`🌐 Getting videos from ${followedChannels.length} followed channels`);
+      
+      try {
+        // Get videos from all followed channels
+        for (const channelUrl of followedChannels) {
+          try {
+            // Extract channel ID from URL or use as-is
+            const channelId = channelUrl.includes('channel/') 
+              ? channelUrl.split('channel/')[1].split('/')[0]
+              : channelUrl.includes('@') 
+                ? channelUrl.split('@')[1].split('/')[0]
+                : channelUrl;
+            
+            const channelResult = await tempYouTubeAPI.getChannelVideos(channelId, { skip: 0, limit: Math.ceil(limit / followedChannels.length) });
+            allVideos.push(...channelResult.videos);
+            
+          } catch (channelError) {
+            console.warn(`⚠️  Failed to get videos from channel: ${channelUrl}`, channelError.message);
+          }
         }
-      })),
-      hasMore: channelResult.hasMore
-    };
-    
-    console.log(`✅ Channel catalog: ${catalog.metas.length} videos`);
-    res.json(catalog);
+        
+        // Sort by publication date (most recent first)
+        allVideos.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+        
+        // Apply pagination
+        const paginatedVideos = allVideos.slice(skip, skip + limit);
+        
+        // Convert to Stremio catalog format
+        const catalog = {
+          metas: paginatedVideos.map(video => ({
+            id: video.id,
+            name: video.title,
+            description: video.description,
+            poster: video.thumbnail,
+            background: video.thumbnail,
+            type: 'movie',
+            releaseInfo: video.publishedAt,
+            runtime: video.duration,
+            youtube: {
+              channelId: video.channelId,
+              channelTitle: video.channel,
+              viewCount: video.viewCount,
+              likeCount: video.likeCount
+            }
+          })),
+          hasMore: allVideos.length > (skip + limit)
+        };
+        
+        console.log(`✅ General catalog: ${catalog.metas.length} videos from all channels`);
+        res.json(catalog);
+        
+      } catch (error) {
+        console.error('❌ Error getting videos from all channels:', error);
+        res.status(500).json({ 
+          error: 'General catalog failed', 
+          details: error.message,
+          metas: [],
+          hasMore: false
+        });
+      }
+    }
     
   } catch (error) {
     console.error('❌ Channel catalog error:', error);
