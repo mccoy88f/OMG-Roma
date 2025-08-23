@@ -16,7 +16,9 @@
     "streaming_search": "/streaming/search",
     "streaming_info": "/streaming/info",
     "streaming_formats": "/streaming/formats",
-    "streaming_channel": "/streaming/channel"
+    "streaming_channel": "/streaming/channel",
+    "config/schema": "/config/schema",
+    "test": "/test"
   },
   
   "stremio": {

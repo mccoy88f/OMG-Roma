@@ -430,6 +430,174 @@ app.get('/config/schema', (req, res) => {
   }
 });
 
+// Test endpoint for plugin self-testing
+app.post('/test', async (req, res) => {
+  try {
+    const { 
+      testType = 'search', 
+      query = 'test', 
+      skip = 0, 
+      limit = 5,
+      // Test configuration (temporary, not saved)
+      testConfig = {}
+    } = req.body;
+
+    console.log(`🧪 YouTube plugin test: ${testType} with config:`, Object.keys(testConfig));
+
+    // Merge test config with current config (test config takes precedence)
+    const mergedConfig = {
+      ...config.getAll(),
+      ...testConfig
+    };
+
+    console.log(`🔧 Using merged config for test:`, Object.keys(mergedConfig));
+
+    let testResult;
+    const startTime = Date.now();
+
+    try {
+      switch (testType) {
+        case 'search':
+          if (!mergedConfig.api_key) {
+            throw new Error('API key required for search test');
+          }
+          
+          const tempYouTubeAPI = new YouTubeAPI(mergedConfig.api_key);
+          const searchResult = await tempYouTubeAPI.search(query, { skip, limit });
+          
+          testResult = {
+            success: true,
+            testType: 'search',
+            query,
+            duration: `${Date.now() - startTime}ms`,
+            result: {
+              videoCount: searchResult.videos?.length || 0,
+              hasMore: searchResult.hasMore || false,
+              sampleVideo: searchResult.videos?.[0] || null,
+              videos: searchResult.videos || []
+            }
+          };
+          break;
+
+        case 'discover':
+          if (!mergedConfig.api_key) {
+            throw new Error('API key required for discover test');
+          }
+          
+          if (!mergedConfig.followed_channels || mergedConfig.followed_channels.length === 0) {
+            throw new Error('Followed channels required for discover test');
+          }
+
+          const discoverAPI = new YouTubeAPI(mergedConfig.api_key);
+          const channelList = Array.isArray(mergedConfig.followed_channels) ? 
+            mergedConfig.followed_channels : 
+            mergedConfig.followed_channels.split(',');
+
+          let allVideos = [];
+          for (const channelUrl of channelList.slice(0, 2)) { // Test with max 2 channels
+            try {
+              const channelId = await discoverAPI.resolveChannelId(channelUrl);
+              const channelResult = await discoverAPI.getChannelVideos(channelId, { limit: 3, skip: 0 });
+              allVideos.push(...channelResult.videos);
+            } catch (error) {
+              console.warn(`⚠️  Channel test failed for ${channelUrl}:`, error.message);
+            }
+          }
+
+          testResult = {
+            success: true,
+            testType: 'discover',
+            duration: `${Date.now() - startTime}ms`,
+            result: {
+              channelCount: channelList.length,
+              testedChannels: channelList.slice(0, 2),
+              videoCount: allVideos.length,
+              hasMore: allVideos.length >= limit,
+              sampleVideos: allVideos.slice(0, 3),
+              videos: allVideos
+            }
+          };
+          break;
+
+        case 'meta':
+          if (!mergedConfig.api_key) {
+            throw new Error('API key required for meta test');
+          }
+          
+          // Use a known video ID for testing
+          const testVideoId = 'dQw4w9WgXcQ'; // Rick Roll
+          const metaAPI = new YouTubeAPI(mergedConfig.api_key);
+          const videoMeta = await metaAPI.getVideoInfo(testVideoId);
+          
+          testResult = {
+            success: true,
+            testType: 'meta',
+            duration: `${Date.now() - startTime}ms`,
+            result: {
+              videoId: testVideoId,
+              video: videoMeta,
+              metadataRetrieved: !!videoMeta
+            }
+          };
+          break;
+
+        case 'stream':
+          // Test streaming endpoint (requires gateway)
+          const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+          try {
+            const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/dQw4w9WgXcQ`);
+            
+            if (response.ok) {
+              const streamData = await response.json();
+              testResult = {
+                success: true,
+                testType: 'stream',
+                duration: `${Date.now() - startTime}ms`,
+                result: {
+                  videoId: 'dQw4w9WgXcQ',
+                  streamFormats: Object.keys(streamData),
+                  hasStreams: Object.keys(streamData).length > 0,
+                  sampleStream: streamData.bestVideo || streamData.videoUrl
+                }
+              };
+            } else {
+              throw new Error(`Gateway streaming error: ${response.status}`);
+            }
+          } catch (error) {
+            throw new Error(`Streaming test failed: ${error.message}`);
+          }
+          break;
+
+        default:
+          throw new Error(`Unknown test type: ${testType}`);
+      }
+
+      console.log(`✅ Test completed successfully:`, testResult);
+      res.json(testResult);
+
+    } catch (testError) {
+      testResult = {
+        success: false,
+        testType,
+        duration: `${Date.now() - startTime}ms`,
+        error: testError.message,
+        result: null
+      };
+      
+      console.error(`❌ Test failed:`, testError.message);
+      res.json(testResult);
+    }
+
+  } catch (error) {
+    console.error('❌ Test endpoint error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Test failed', 
+      details: error.message 
+    });
+  }
+});
+
 // Channel catalog endpoint for Stremio
 app.get('/catalog/channel/:channelId/:extra?.json', async (req, res) => {
   try {

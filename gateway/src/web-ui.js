@@ -388,64 +388,93 @@ class WebUI {
       }
     });
 
-    // Test plugin functionality
-    this.router.post('/plugins/:pluginId/test', async (req, res) => {
-      try {
-        const { pluginId } = req.params;
-        const { testType = 'search', query = 'test' } = req.body;
+         // Test plugin functionality with dynamic configuration
+     this.router.post('/plugins/:pluginId/test', async (req, res) => {
+       try {
+         const { pluginId } = req.params;
+         const { 
+           testType = 'search', 
+           query = 'test',
+           testConfig = {} // Temporary configuration for testing
+         } = req.body;
 
-        const plugin = this.pluginManager.plugins.get(pluginId);
-        if (!plugin) {
-          return res.status(404).json({ 
-            success: false, 
-            error: 'Plugin not found' 
-          });
-        }
+         const plugin = this.pluginManager.plugins.get(pluginId);
+         if (!plugin) {
+           return res.status(404).json({ 
+             success: false, 
+             error: 'Plugin not found' 
+           });
+         }
 
-        let testResult;
-        const startTime = Date.now();
+         // Use the new test endpoint that accepts test configuration
+         const testResult = await this.pluginManager.testPlugin(pluginId, {
+           testType,
+           query,
+           testConfig
+         });
 
-        switch (testType) {
-          case 'search':
-            testResult = await this.pluginManager.callPlugin(pluginId, 'search', {
-              search: query,
-              limit: 5
-            });
-            break;
-            
-          case 'discover':
-            testResult = await this.pluginManager.callPlugin(pluginId, 'discover', {
-              limit: 5
-            });
-            break;
-            
-          default:
-            throw new Error(`Unknown test type: ${testType}`);
-        }
+         res.json({
+           success: true,
+           pluginId,
+           testType,
+           testConfig: Object.keys(testConfig),
+           ...testResult
+         });
 
-        const duration = Date.now() - startTime;
+       } catch (error) {
+         console.error('❌ Error testing plugin:', error);
+         res.status(500).json({ 
+           success: false, 
+           error: 'Plugin test failed',
+           details: error.message
+         });
+       }
+     });
 
-        res.json({
-          success: true,
-          pluginId,
-          testType,
-          duration: `${duration}ms`,
-          result: {
-            videoCount: testResult.videos?.length || 0,
-            hasMore: testResult.hasMore || false,
-            sampleVideo: testResult.videos?.[0] || null
-          }
-        });
+     // Get test form configuration for a plugin
+     this.router.get('/plugins/:pluginId/test-form', async (req, res) => {
+       try {
+         const { pluginId } = req.params;
+         
+         const plugin = this.pluginManager.plugins.get(pluginId);
+         if (!plugin) {
+           return res.status(404).json({ 
+             success: false, 
+             error: 'Plugin not found' 
+           });
+         }
 
-      } catch (error) {
-        console.error('❌ Error testing plugin:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: 'Plugin test failed',
-          details: error.message
-        });
-      }
-    });
+         // Get current config and schema
+         const [currentConfig, schemaResponse] = await Promise.all([
+           this.pluginManager.getPluginConfig(pluginId),
+           this.pluginManager.getPluginConfigSchema(pluginId)
+         ]);
+
+         // Get available test types from plugin
+         const testTypes = [
+           { id: 'search', name: 'Test Ricerca', description: 'Testa la funzionalità di ricerca' },
+           { id: 'discover', name: 'Test Discover', description: 'Testa la funzionalità di discover' },
+           { id: 'meta', name: 'Test Metadata', description: 'Testa il recupero metadata video' },
+           { id: 'stream', name: 'Test Streaming', description: 'Testa la funzionalità di streaming' }
+         ];
+
+         res.json({
+           success: true,
+           pluginId,
+           testTypes,
+           currentConfig,
+           schema: schemaResponse?.schema || plugin.config.config_schema || {},
+           description: plugin.config.description
+         });
+
+       } catch (error) {
+         console.error('❌ Error getting test form:', error);
+         res.status(500).json({ 
+           success: false, 
+           error: 'Failed to get test form configuration' 
+         });
+       }
+     });
 
     // Get plugin logs (if available)
     this.router.get('/plugins/:pluginId/logs', (req, res) => {

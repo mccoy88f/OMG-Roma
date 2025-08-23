@@ -272,10 +272,16 @@ class PluginManager {
         manifestEnabled: true // Default: plugin is enabled in manifest
       };
       
-      // Ensure config endpoint exists
-      if (!pluginConfig.endpoints.config) {
-        pluginConfig.endpoints.config = "/config";
-      }
+             // Ensure required endpoints exist
+       if (!pluginConfig.endpoints.config) {
+         pluginConfig.endpoints.config = "/config";
+       }
+       if (!pluginConfig.endpoints['config/schema']) {
+         pluginConfig.endpoints['config/schema'] = "/config/schema";
+       }
+       if (!pluginConfig.endpoints.test) {
+         pluginConfig.endpoints.test = "/test";
+       }
       
       this.plugins.set(pluginId, plugin);
       console.log(`📦 Loaded plugin: ${pluginConfig.name} (${pluginId})`);
@@ -458,10 +464,33 @@ class PluginManager {
     } catch (error) {
       console.error(`❌ Error getting plugin config schema for ${pluginId}:`, error);
       // Fallback to plugin.json config
-      return {
-        success: true,
-        schema: plugin.config.config_schema || {}
-      };
+      const plugin = this.plugins.get(pluginId);
+      if (plugin) {
+        return {
+          success: true,
+          schema: plugin.config.config_schema || {}
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Plugin not found for fallback'
+        };
+      }
+    }
+  }
+
+  async testPlugin(pluginId, testParams) {
+    try {
+      const plugin = this.plugins.get(pluginId);
+      if (!plugin) {
+        throw new Error(`Plugin ${pluginId} not found`);
+      }
+
+      const response = await this.callPlugin(pluginId, 'test', testParams);
+      return response;
+    } catch (error) {
+      console.error(`❌ Error testing plugin ${pluginId}:`, error);
+      throw error;
     }
   }
 
