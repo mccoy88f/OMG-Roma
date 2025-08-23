@@ -33,6 +33,21 @@ const stremioAdapter = new StremioAdapter(pluginManager);
 const webUI = new WebUI(pluginManager);
 const streamingManager = new StreamingManager();
 
+// Utility function to parse query strings
+function parseQueryString(queryString) {
+  const params = {};
+  if (!queryString) return params;
+  
+  const pairs = queryString.split('&');
+  for (const pair of pairs) {
+    const [key, value] = pair.split('=');
+    if (key && value) {
+      params[decodeURIComponent(key)] = decodeURIComponent(value);
+    }
+  }
+  return params;
+}
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({

@@ -138,9 +138,22 @@ app.post('/search', async (req, res) => {
     // Fallback to centralized yt-dlp search if no results or hybrid/ytdlp mode
     if (videos.length === 0 && (searchMode === 'ytdlp' || searchMode === 'hybrid')) {
       console.log('🔄 Falling back to centralized yt-dlp search');
-      // The gateway will handle yt-dlp search through the streaming API
-      // For now, we'll return empty results and let the gateway handle it
-      console.log('ℹ️  yt-dlp search is now handled by OMG-Roma Gateway');
+      
+      try {
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        const response = await fetch(`${gatewayUrl}/api/streaming/youtube/search?query=${encodeURIComponent(search)}&limit=${limit}&skip=${skip}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          videos = data.videos || [];
+          hasMore = data.hasMore || false;
+          console.log(`✅ Centralized search found ${videos.length} videos`);
+        } else {
+          console.warn('⚠️  Centralized search failed:', response.status);
+        }
+      } catch (error) {
+        console.warn('⚠️  Centralized search error:', error.message);
+      }
     }
     
     console.log(`✅ Found ${videos.length} videos`);
@@ -182,10 +195,18 @@ app.post('/discover', async (req, res) => {
       try {
         console.log(`📡 Fetching videos from: ${channelUrl}`);
         
-        // Channel videos are now handled by the centralized streaming service
-        // For now, we'll return empty results and let the gateway handle it
-        console.log(`ℹ️  Channel videos for ${channelUrl} are now handled by OMG-Roma Gateway`);
-        const channelVideos = [];
+        // Get channel videos using centralized streaming service
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        const response = await fetch(`${gatewayUrl}/api/streaming/youtube/channel/${encodeURIComponent(channelUrl)}?limit=${Math.ceil(limit / followedChannels.length)}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          channelVideos = data.videos || [];
+          console.log(`✅ Found ${channelVideos.length} videos from ${channelUrl}`);
+        } else {
+          console.warn(`⚠️  Gateway error for ${channelUrl}: ${response.status}`);
+          channelVideos = [];
+        }
         
         allVideos.push(...channelVideos);
         
@@ -226,18 +247,19 @@ app.post('/meta', async (req, res) => {
     
     console.log(`📝 Getting meta for: ${videoId}`);
     
-    // Video metadata is now handled by the centralized streaming service
-    // For now, we'll return a placeholder and let the gateway handle it
-    console.log(`ℹ️  Video metadata for ${videoId} is now handled by OMG-Roma Gateway`);
-    const video = null;
+    // Get video metadata using centralized streaming service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/info/${videoId}`);
     
-    if (!video) {
-      return res.status(404).json({ error: 'Video not found' });
+    if (response.ok) {
+      const data = await response.json();
+      video = data;
+      console.log(`✅ Meta retrieved for: ${video.title}`);
+      res.json({ video });
+    } else {
+      console.warn(`⚠️  Gateway error for meta: ${response.status}`);
+      res.status(404).json({ error: 'Video not found' });
     }
-    
-    console.log(`✅ Meta retrieved for: ${video.title}`);
-    
-    res.json({ video });
     
   } catch (error) {
     console.error('❌ Meta error:', error);
@@ -255,18 +277,19 @@ app.post('/stream', async (req, res) => {
     
     console.log(`🎬 Getting streams for: ${videoId}`);
     
-    // Video streams are now handled by the centralized streaming service
-    // For now, we'll return empty streams and let the gateway handle it
-    console.log(`ℹ️  Video streams for ${videoId} are now handled by OMG-Roma Gateway`);
-    const streams = [];
+    // Get video streams using centralized streaming service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
     
-    if (!streams || streams.length === 0) {
-      return res.json({ streams: [] });
+    if (response.ok) {
+      const data = await response.json();
+      streams = data;
+      console.log(`✅ Found ${streams.length} streams for: ${videoId}`);
+      res.json({ streams });
+    } else {
+      console.warn(`⚠️  Gateway error for streams: ${response.status}`);
+      res.json({ streams: [] });
     }
-    
-    console.log(`✅ Found ${streams.length} streams for: ${videoId}`);
-    
-    res.json({ streams });
     
   } catch (error) {
     console.error('❌ Stream error:', error);
