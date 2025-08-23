@@ -7,7 +7,6 @@ RUN apt-get update --fix-missing \
     curl \
     bash \
     git \
-    procps \
     python3 \
     python3-pip \
     ffmpeg \
@@ -61,8 +60,8 @@ RUN echo "📂 Verifying plugins.json copy:" && \
     cat /app/config/plugins.json && \
     echo "📊 Validation complete"
 
-# Simple health check - just check if process is running
-RUN echo '#!/bin/bash\nif pgrep -f "node.*src/index.js" > /dev/null; then\n    echo "✅ OMG-Roma Gateway process is running"\n    exit 0\nelse\n    echo "❌ OMG-Roma Gateway process not found"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
+# No health check needed - gateway is always running
+# Simple process monitoring is sufficient
 
 # Create non-root user
 RUN groupadd --gid 1001 nodejs && \
@@ -77,9 +76,8 @@ USER nodejs
 # Expose port
 EXPOSE 3100
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD /app/health-check.sh
+# No health check - gateway runs continuously
+# Plugin connection retry is handled in application logic
 
 # Start the application
 CMD ["node", "src/index.js"]

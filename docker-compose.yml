@@ -38,11 +38,8 @@ services:
     networks:
       - omg-roma-network
     restart: unless-stopped
-    # Plugin starts after gateway (simple dependency)
-    depends_on:
-      - gateway
-    # No health check needed - plugin is simple and lightweight
-    # Gateway health check is sufficient for overall system health
+    # Plugin starts independently - gateway will retry connection every 5 seconds
+    # No dependencies needed - simple and robust approach
 
 networks:
   omg-roma-network:

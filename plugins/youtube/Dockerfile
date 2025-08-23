@@ -7,7 +7,6 @@ RUN apt-get update \
     curl \
     bash \
     git \
-    procps \
   && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -38,8 +37,8 @@ COPY config/youtube.config.json ./config.json
 # Create config directory
 RUN mkdir -p /app/config
 
-# Create health check script inline
-RUN echo '#!/bin/bash\nresponse=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health)\nif [ "$response" = "200" ]; then\n    echo "✅ OMG-Roma YouTube Plugin is healthy"\n    exit 0\nelse\n    echo "❌ OMG-Roma YouTube Plugin health check failed (HTTP: $response)"\n    exit 1\nfi' > /app/health-check.sh && chmod +x /app/health-check.sh
+# No health check needed - plugin runs independently
+# Gateway will retry connection when plugin is ready
 
 # Create non-root user
 RUN groupadd --gid 1001 nodejs && \
@@ -54,9 +53,8 @@ USER nodejs
 # Expose port
 EXPOSE 3001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD /app/health-check.sh
+# No health check - plugin runs independently
+# Gateway handles connection retry logic
 
 # Start the application
 CMD ["node", "src/index.js"]
