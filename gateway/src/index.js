@@ -60,14 +60,16 @@ app.get('/health', (req, res) => {
 // Stremio manifest
 app.get('/manifest.json', async (req, res) => {
   try {
-    // Check if configuration hash is provided
-    const { config } = req.query;
+    // Get all query parameters for plugin configuration
+    const configParams = req.url.includes('?') ? req.url.split('?')[1] : null;
     
-    if (config) {
-      console.log(`🔧 Generating personalized manifest for config: ${config}`);
+    if (configParams) {
+      console.log(`🔧 Generating personalized manifest with config: ${configParams}`);
+    } else {
+      console.log(`🔧 Generating default manifest (no config)`);
     }
     
-    const manifest = await stremioAdapter.generateManifest(config);
+    const manifest = await stremioAdapter.generateManifest(configParams);
     res.json(manifest);
   } catch (error) {
     console.error('❌ Error generating manifest:', error);
@@ -95,6 +97,29 @@ app.get('/catalog/:type/:catalogId/:extra?.json', async (req, res) => {
           console.warn(`⚠️  Query string parsing also failed: ${queryError.message}`);
           extraParams = {};
         }
+      }
+    }
+    
+    // Add query parameters to extraParams (including plugin configs)
+    Object.assign(extraParams, req.query);
+    
+    // Extract plugin configurations from manifest URL query params
+    const referer = req.get('Referer');
+    if (referer && referer.includes('manifest.json?')) {
+      try {
+        const manifestUrl = new URL(referer);
+        const manifestParams = new URLSearchParams(manifestUrl.search);
+        
+        // Add plugin configs to extraParams
+        for (const [key, value] of manifestParams) {
+          if (key.startsWith('youtube_') || key.startsWith('vimeo_')) {
+            extraParams[key] = value;
+          }
+        }
+        
+        console.log(`🔧 Added plugin configs from manifest:`, Object.keys(extraParams).filter(k => k.startsWith('youtube_') || k.startsWith('vimeo_')));
+      } catch (error) {
+        console.warn('⚠️  Failed to parse manifest params from referer:', error.message);
       }
     }
     

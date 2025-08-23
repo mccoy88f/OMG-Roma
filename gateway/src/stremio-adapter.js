@@ -5,9 +5,24 @@ class StremioAdapter {
     this.configCache = new Map();   // Cache per configurazioni plugin
   }
 
-  async generateManifest(configHash = null) {
+  async generateManifest(configParams = null) {
     const plugins = this.pluginManager.getAllPlugins();
     const catalogs = [];
+    
+    // Parse configuration parameters if provided
+    let pluginConfigs = {};
+    if (configParams) {
+      try {
+        // Parse query string parameters
+        const params = new URLSearchParams(configParams);
+        for (const [key, value] of params) {
+          pluginConfigs[key] = value;
+        }
+        console.log(`🔧 Parsed plugin configs:`, Object.keys(pluginConfigs));
+      } catch (error) {
+        console.warn('⚠️  Failed to parse config params:', error.message);
+      }
+    }
     
     // Generate catalogs from enabled plugins only
     for (const plugin of plugins) {
@@ -56,7 +71,7 @@ class StremioAdapter {
 
     // Generate unique manifest ID based on configuration
     const baseId = "omg.roma.addon";
-    const manifestId = configHash ? `${baseId}.${configHash}` : baseId;
+    const manifestId = configParams ? `${baseId}.${this.hashConfig(configParams)}` : baseId;
 
     const manifest = {
       id: manifestId,
@@ -98,6 +113,20 @@ class StremioAdapter {
     };
 
     return manifest;
+  }
+
+  hashConfig(configString) {
+    // Simple hash function for configuration string
+    let hash = 0;
+    if (configString.length === 0) return hash.toString();
+    
+    for (let i = 0; i < configString.length; i++) {
+      const char = configString.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return Math.abs(hash).toString(36);
   }
 
   // Generate configuration hash for personalized manifests

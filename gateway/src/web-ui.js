@@ -213,14 +213,14 @@ class WebUI {
           console.log('🔄 Force manifest regeneration requested');
         }
         
-        // Generate configuration hash for personalized manifest
-        const configHash = await stremioAdapter.generateConfigHash();
-        const manifest = await stremioAdapter.generateManifest(configHash);
+        // Generate configuration parameters for personalized manifest
+        const configParams = await this.generateConfigParams();
+        const manifest = await stremioAdapter.generateManifest(configParams);
         
-        // Generate personalized manifest URL
+        // Generate personalized manifest URL with all plugin configs
         const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const manifestUrl = configHash 
-          ? `${baseUrl}/manifest.json?config=${configHash}`
+        const manifestUrl = configParams 
+          ? `${baseUrl}/manifest.json?${configParams}`
           : `${baseUrl}/manifest.json`;
         
         res.json({
@@ -228,8 +228,8 @@ class WebUI {
           manifest,
           catalogCount: manifest.catalogs.length,
           manifestUrl,
-          configHash,
-          isPersonalized: !!configHash,
+          configParams,
+          isPersonalized: !!configParams,
           regenerated: force === 'true'
         });
 
@@ -252,13 +252,13 @@ class WebUI {
         stremioAdapter.clearManifestCache();
         
         // Generate new manifest
-        const configHash = await stremioAdapter.generateConfigHash();
-        const manifest = await stremioAdapter.generateManifest(configHash);
+        const configParams = await this.generateConfigParams();
+        const manifest = await stremioAdapter.generateManifest(configParams);
         
         // Generate new manifest URL
         const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const manifestUrl = configHash 
-          ? `${baseUrl}/manifest.json?config=${configHash}`
+        const manifestUrl = configParams 
+          ? `${baseUrl}/manifest.json?${configParams}`
           : `${baseUrl}/manifest.json`;
         
         res.json({
@@ -266,8 +266,8 @@ class WebUI {
           message: 'Manifest regenerated successfully',
           manifest,
           manifestUrl,
-          configHash,
-          isPersonalized: !!configHash
+          configParams,
+          isPersonalized: !!configParams
         });
 
       } catch (error) {
@@ -360,8 +360,11 @@ class WebUI {
         const manifest = await stremioAdapter.generateManifest(configHash);
         
         // Generate new manifest URL
+        const configParams = await this.generateConfigParams();
         const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const newManifestUrl = `${baseUrl}/manifest.json?config=${configHash}`;
+        const newManifestUrl = configParams 
+          ? `${baseUrl}/manifest.json?${configParams}`
+          : `${baseUrl}/manifest.json`;
         
         res.json({
           success: true,
@@ -369,7 +372,7 @@ class WebUI {
           manifest: {
             updated: true,
             newUrl: newManifestUrl,
-            configHash: configHash
+            configParams: configParams
           }
         });
 
@@ -454,6 +457,54 @@ class WebUI {
 
   getRouter() {
     return this.router;
+  }
+
+  async generateConfigParams() {
+    try {
+      const plugins = this.pluginManager.getAllPlugins();
+      const params = new URLSearchParams();
+      
+      for (const plugin of plugins) {
+        if (plugin.manifestEnabled === false) continue;
+        
+        const pluginId = plugin.id;
+        const config = plugin.config;
+        
+        // Add plugin-specific configuration parameters
+        if (pluginId === 'youtube') {
+          if (config.api_key) {
+            params.append('youtube_api_key', config.api_key);
+          }
+          if (config.followed_channels && config.followed_channels.length > 0) {
+            params.append('youtube_channels', config.followed_channels.join(','));
+          }
+          if (config.search_mode) {
+            params.append('youtube_search_mode', config.search_mode);
+          }
+          if (config.video_limit) {
+            params.append('youtube_video_limit', config.video_limit);
+          }
+        }
+        
+        // Add other plugins as needed
+        if (pluginId === 'vimeo') {
+          if (config.api_key) {
+            params.append('vimeo_api_key', config.api_key);
+          }
+          if (config.playlists && config.playlists.length > 0) {
+            params.append('vimeo_playlists', config.playlists.join(','));
+          }
+        }
+      }
+      
+      const configString = params.toString();
+      console.log(`🔧 Generated config params: ${configString}`);
+      return configString;
+      
+    } catch (error) {
+      console.error('❌ Error generating config params:', error);
+      return null;
+    }
   }
 }
 
