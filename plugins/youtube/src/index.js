@@ -106,7 +106,7 @@ app.get('/ready', (req, res) => {
 // Search endpoint
 app.post('/search', async (req, res) => {
   try {
-    const { search, skip = 0, limit = 20 } = req.body;
+    const { search, skip = 0, limit = 20, api_key } = req.body;
     
     console.log(`🔍 YouTube search: "${search}" (skip: ${skip}, limit: ${limit})`);
     
@@ -114,52 +114,27 @@ app.post('/search', async (req, res) => {
       return res.json({ videos: [], hasMore: false });
     }
     
-    const searchMode = config.get('search_mode', 'hybrid');
-    let videos = [];
-    let hasMore = false;
-    
-    // Try API search first if available and mode allows
-    if ((searchMode === 'api' || searchMode === 'hybrid') && youtubeAPI.isConfigured()) {
-      try {
-        console.log('🚀 Using YouTube API search');
-        const result = await youtubeAPI.search(search, { skip, limit });
-        videos = result.videos;
-        hasMore = result.hasMore;
-      } catch (error) {
-        console.warn('⚠️  YouTube API search failed:', error.message);
-        
-        if (searchMode === 'api') {
-          throw error; // If API-only mode, propagate error
-        }
-        // In hybrid mode, continue to yt-dlp fallback
-      }
+    // Use API key from request if provided, otherwise from config
+    const searchApiKey = api_key || config.get('api_key');
+    if (!searchApiKey) {
+      throw new Error('YouTube API key not provided');
     }
     
-    // Fallback to yt-dlp search if no results or hybrid/ytdlp mode
-    if (videos.length === 0 && (searchMode === 'ytdlp' || searchMode === 'hybrid')) {
-      console.log('🔄 Falling back to yt-dlp search via gateway');
+    // Create temporary YouTube API instance for this request
+    const tempYouTubeAPI = new YouTubeAPI(searchApiKey);
+    
+    try {
+      console.log('🚀 Using YouTube API search');
+      const result = await tempYouTubeAPI.search(search, { skip, limit });
+      const videos = result.videos;
+      const hasMore = result.hasMore;
       
-      try {
-        // Use gateway's centralized yt-dlp service
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-        const response = await fetch(`${gatewayUrl}/api/streaming/youtube/search?query=${encodeURIComponent(search)}&limit=${limit}&skip=${skip}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          videos = data.videos || [];
-          hasMore = data.hasMore || false;
-          console.log(`✅ Gateway yt-dlp search found ${videos.length} videos`);
-        } else {
-          console.warn('⚠️  Gateway yt-dlp search failed:', response.status);
-        }
-      } catch (error) {
-        console.warn('⚠️  Gateway yt-dlp search error:', error.message);
-      }
+      console.log(`✅ Found ${videos.length} videos`);
+      res.json({ videos, hasMore });
+    } catch (error) {
+      console.error('❌ YouTube API search failed:', error.message);
+      throw error;
     }
-    
-    console.log(`✅ Found ${videos.length} videos`);
-    
-    res.json({ videos, hasMore });
     
   } catch (error) {
     console.error('❌ Search error:', error);
@@ -175,10 +150,46 @@ app.post('/search', async (req, res) => {
 // Discover endpoint
 app.post('/discover', async (req, res) => {
   try {
-    const { skip = 0, limit = 20 } = req.body;
-    const followedChannels = config.get('followed_channels', []);
+    const { skip = 0, limit = 20, catalogId } = req.body;
     
-    console.log(`📺 YouTube discover (skip: ${skip}, limit: ${limit})`);
+    // If catalogId is provided, it's a specific channel request
+    if (catalogId && catalogId.startsWith('youtube_channel_')) {
+      const channelId = catalogId.replace('youtube_channel_', '');
+      console.log(`📺 YouTube channel discover: ${channelId} (skip: ${skip}, limit: ${limit})`);
+      
+      try {
+        // Use API key from request if provided, otherwise from config
+        const discoverApiKey = req.body.api_key || config.get('api_key');
+        if (!discoverApiKey) {
+          throw new Error('YouTube API key not provided');
+        }
+        
+        // Create temporary YouTube API instance for this request
+        const tempYouTubeAPI = new YouTubeAPI(discoverApiKey);
+        
+        // Get videos from specific channel using YouTube API
+        const channelVideos = await tempYouTubeAPI.getChannelVideos(channelId, { skip, limit });
+        console.log(`✅ Found ${channelVideos.length} videos from channel ${channelId}`);
+        
+        res.json({ 
+          videos: channelVideos, 
+          hasMore: channelVideos.length >= limit 
+        });
+      } catch (error) {
+        console.error(`❌ Channel discover error for ${channelId}:`, error.message);
+        res.status(500).json({ 
+          error: 'Channel discover failed', 
+          details: error.message,
+          videos: [],
+          hasMore: false
+        });
+      }
+      return;
+    }
+    
+    // General discover: get videos from all followed channels
+    const followedChannels = config.get('followed_channels', []);
+    console.log(`📺 YouTube general discover (skip: ${skip}, limit: ${limit})`);
     console.log(`Following ${followedChannels.length} channels`);
     
     if (followedChannels.length === 0) {
@@ -201,7 +212,7 @@ app.post('/discover', async (req, res) => {
         if (channelUrl.includes('@')) {
           // Handle @username format
           const username = channelUrl.split('@')[1].split('/')[0];
-          // For now, we'll use a placeholder approach
+          // TODO: Convert username to channel ID using YouTube API
           console.log(`ℹ️  Using username: ${username} for channel discovery`);
         } else if (channelUrl.includes('channel/')) {
           // Handle /channel/ID format
@@ -209,25 +220,26 @@ app.post('/discover', async (req, res) => {
         } else if (channelUrl.includes('c/')) {
           // Handle /c/username format
           const username = channelUrl.split('c/')[1].split('/')[0];
+          // TODO: Convert custom URL to channel ID using YouTube API
           console.log(`ℹ️  Using custom URL: ${username} for channel discovery`);
         }
         
-        // For now, return placeholder videos to avoid timeout
-        // In a real implementation, you would use YouTube API to get channel videos
-        const placeholderVideos = [
-          {
-            id: `placeholder_${Date.now()}_${Math.random()}`,
-            title: `Video from ${channelUrl}`,
-            thumbnail: 'https://via.placeholder.com/320x180',
-            duration: '00:10:00',
-            publishedAt: new Date().toISOString(),
-            viewCount: 1000,
-            channelTitle: channelUrl
-          }
-        ];
+        // Use API key from request if provided, otherwise from config
+        const discoverApiKey = req.body.api_key || config.get('api_key');
+        if (!discoverApiKey) {
+          throw new Error('YouTube API key not provided');
+        }
         
-        console.log(`✅ Found ${placeholderVideos.length} placeholder videos from ${channelUrl}`);
-        allVideos.push(...placeholderVideos);
+        // Create temporary YouTube API instance for this request
+        const tempYouTubeAPI = new YouTubeAPI(discoverApiKey);
+        
+        // Get videos from channel using YouTube API
+        const channelVideos = await tempYouTubeAPI.getChannelVideos(channelId, {
+          limit: Math.ceil(limit / followedChannels.length)
+        });
+        
+        console.log(`✅ Found ${channelVideos.length} videos from ${channelUrl}`);
+        allVideos.push(...channelVideos);
         
       } catch (error) {
         console.warn(`⚠️  Failed to fetch from ${channelUrl}:`, error.message);
@@ -241,7 +253,7 @@ app.post('/discover', async (req, res) => {
     const paginatedVideos = allVideos.slice(skip, skip + limit);
     const hasMore = allVideos.length > skip + limit;
     
-    console.log(`✅ Discover found ${paginatedVideos.length} videos`);
+    console.log(`✅ General discover found ${paginatedVideos.length} videos`);
     
     res.json({ 
       videos: paginatedVideos, 
@@ -262,21 +274,26 @@ app.post('/discover', async (req, res) => {
 // Meta endpoint
 app.post('/meta', async (req, res) => {
   try {
-    const { videoId } = req.body;
+    const { videoId, api_key } = req.body;
     
     console.log(`📝 Getting meta for: ${videoId}`);
     
-    // Get video metadata using gateway's centralized yt-dlp service
-    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/info/${videoId}`);
+    // Use API key from request if provided, otherwise from config
+    const metaApiKey = api_key || config.get('api_key');
+    if (!metaApiKey) {
+      throw new Error('YouTube API key not provided');
+    }
     
-    if (response.ok) {
-      const data = await response.json();
-      video = data;
-      console.log(`✅ Meta retrieved for: ${video.title} via gateway`);
+    // Create temporary YouTube API instance for this request
+    const tempYouTubeAPI = new YouTubeAPI(metaApiKey);
+    
+    try {
+      // Get video metadata using YouTube API
+      const video = await tempYouTubeAPI.getVideoInfo(videoId);
+      console.log(`✅ Meta retrieved for: ${video.title}`);
       res.json({ video });
-    } else {
-      console.warn(`⚠️  Gateway error for meta: ${response.status}`);
+    } catch (error) {
+      console.error(`❌ Failed to get video metadata: ${error.message}`);
       res.status(404).json({ error: 'Video not found' });
     }
     
@@ -296,14 +313,28 @@ app.post('/stream', async (req, res) => {
     
     console.log(`🎬 Getting streams for: ${videoId}`);
     
-    // Get video streams using gateway's centralized yt-dlp service
+    // Get best audio and best video streams directly from gateway
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/stream/${videoId}?quality=best`);
     
     if (response.ok) {
       const data = await response.json();
-      streams = data;
-      console.log(`✅ Found ${streams.length} streams for: ${videoId} via gateway`);
+      const streams = [
+        {
+          name: 'Best Video',
+          url: data.videoUrl,
+          quality: 'best',
+          type: 'video'
+        },
+        {
+          name: 'Best Audio',
+          url: data.audioUrl,
+          quality: 'best',
+          type: 'audio'
+        }
+      ];
+      
+      console.log(`✅ Found ${streams.length} streams for: ${videoId}`);
       res.json({ streams });
     } else {
       console.warn(`⚠️  Gateway error for streams: ${response.status}`);
