@@ -138,6 +138,20 @@ app.get('/catalog/:type/:catalogId/:extra?.json', async (req, res) => {
       }
     }
     
+    // Parse extra parameter if it's a query string (e.g., "search=antonello migliorelli")
+    if (extra && extra.includes('=')) {
+      try {
+        // Try to parse as query string first
+        const queryParams = new URLSearchParams(extra);
+        for (const [key, value] of queryParams) {
+          extraParams[key] = value;
+        }
+        console.log(`🔧 Parsed extra as query string:`, Object.keys(extraParams));
+      } catch (queryError) {
+        console.warn('⚠️  Failed to parse extra as query string:', queryError.message);
+      }
+    }
+    
     console.log(`🔍 Catalog request: ${catalogId}`, extraParams);
     
     const result = await stremioAdapter.handleCatalogRequest(catalogId, extraParams);

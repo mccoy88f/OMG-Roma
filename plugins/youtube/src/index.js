@@ -109,13 +109,14 @@ app.post('/search', async (req, res) => {
     const { search, skip = 0, limit = 20, api_key } = req.body;
     
     console.log(`🔍 YouTube search: "${search}" (skip: ${skip}, limit: ${limit})`);
+    console.log(`🔧 Search request body:`, req.body);
     
     if (!search || search.trim().length === 0) {
       return res.json({ videos: [], hasMore: false });
     }
     
     // Use API key from request if provided, otherwise from config
-    const searchApiKey = api_key || req.body.youtube_api_key || config.get('api_key');
+    const searchApiKey = api_key || req.body.api_key || config.get('api_key');
     if (!searchApiKey) {
       throw new Error('YouTube API key not provided');
     }
@@ -273,7 +274,7 @@ app.post('/meta', async (req, res) => {
     console.log(`📝 Getting meta for: ${videoId}`);
     
     // Use API key from request if provided, otherwise from config
-    const metaApiKey = api_key || req.body.youtube_api_key || config.get('api_key');
+    const metaApiKey = api_key || req.body.api_key || config.get('api_key');
     if (!metaApiKey) {
       throw new Error('YouTube API key not provided');
     }

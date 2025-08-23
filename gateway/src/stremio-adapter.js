@@ -276,9 +276,16 @@ class StremioAdapter {
         catalogId,
         search: extraParams.search || '',
         skip: parseInt(extraParams.skip) || 0,
-        limit: 20,
-        ...extraParams
+        limit: 20
       };
+      
+      // Add plugin-specific configuration parameters
+      for (const [key, value] of Object.entries(extraParams)) {
+        if (key.startsWith(`${pluginId}_`)) {
+          const configKey = key.replace(`${pluginId}_`, '');
+          requestParams[configKey] = value;
+        }
+      }
 
       console.log(`🔍 ${endpoint} request to ${pluginId}:`, requestParams);
 
