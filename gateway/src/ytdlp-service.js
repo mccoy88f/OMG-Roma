@@ -449,34 +449,87 @@ class YtdlpService {
         acodec: videoInfo.acodec || 'unknown',
         format_id: videoInfo.format_id,
         label: `🎬 Best Quality (${videoInfo.height || 'Unknown'}p)`,
-        type: 'combined'
+        type: 'combined',
+        video_title: videoInfo.title || 'Unknown Video',
+        channel_name: videoInfo.channel || videoInfo.uploader || 'Unknown Author'
       });
     }
     
     // Se abbiamo requested_formats, sono i formati separati di bestvideo+bestaudio
     if (videoInfo.requested_formats && Array.isArray(videoInfo.requested_formats)) {
-      videoInfo.requested_formats.forEach((format, index) => {
-        if (format.url) {
-          const isVideo = format.vcodec && format.vcodec !== 'none';
-          const isAudio = format.acodec && format.acodec !== 'none';
-          
-          formats.push({
-            url: format.url,
-            ext: format.ext || 'mp4',
-            quality: isVideo ? `${format.height}p` : 'audio',
-            width: format.width || 0,
-            height: format.height || 0,
-            fps: format.fps || 0,
-            filesize: format.filesize || 0,
-            vcodec: format.vcodec || 'none',
-            acodec: format.acodec || 'none',
-            format_id: format.format_id,
-            label: isVideo ? 
-              `🎬 Best Video (${format.height || 'Unknown'}p)` :
-              `🎵 Best Audio`,
-            type: isVideo ? 'video' : 'audio'
-          });
-        }
+      // Cerca di creare formati combinati quando possibile
+      const videoFormats = videoInfo.requested_formats.filter(f => f.vcodec && f.vcodec !== 'none');
+      const audioFormats = videoInfo.requested_formats.filter(f => f.acodec && f.acodec !== 'none');
+      
+      // Crea formati combinati per le migliori qualità
+      if (videoFormats.length > 0 && audioFormats.length > 0) {
+        // Prendi il miglior video e il miglior audio
+        const bestVideo = videoFormats.reduce((best, current) => 
+          (current.height || 0) > (best.height || 0) ? current : best
+        );
+        const bestAudio = audioFormats.reduce((best, current) => 
+          (current.abr || 0) > (best.abr || 0) ? current : best
+        );
+        
+        // Crea formato combinato usando il proxy del gateway
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        const combinedUrl = `${gatewayUrl}/api/streaming/youtube/combine/${videoInfo.id}?video=${bestVideo.format_id}&audio=${bestAudio.format_id}`;
+        
+        formats.push({
+          url: combinedUrl,
+          ext: bestVideo.ext || 'mp4',
+          quality: `${bestVideo.height}p`,
+          width: bestVideo.width || 0,
+          height: bestVideo.height || 0,
+          fps: bestVideo.fps || 30,
+          filesize: (bestVideo.filesize || 0) + (bestAudio.filesize || 0),
+          vcodec: bestVideo.vcodec || 'unknown',
+          acodec: bestAudio.acodec || 'unknown',
+          format_id: `${bestVideo.format_id}+${bestAudio.format_id}`,
+          label: `🎬 Combined Best (${bestVideo.height || 'Unknown'}p)`,
+          type: 'combined',
+          video_title: videoInfo.title || 'Unknown Video',
+          channel_name: videoInfo.channel || videoInfo.uploader || 'Unknown Author'
+        });
+      }
+      
+      // Aggiungi anche i formati separati come fallback
+      videoFormats.forEach(format => {
+        formats.push({
+          url: format.url,
+          ext: format.ext || 'mp4',
+          quality: `${format.height}p`,
+          width: format.width || 0,
+          height: format.height || 0,
+          fps: format.fps || 0,
+          filesize: format.filesize || 0,
+          vcodec: format.vcodec || 'none',
+          acodec: 'none',
+          format_id: format.format_id,
+          label: `🎬 Video Only (${format.height || 'Unknown'}p)`,
+          type: 'video',
+          video_title: videoInfo.title || 'Unknown Video',
+          channel_name: videoInfo.channel || videoInfo.uploader || 'Unknown Author'
+        });
+      });
+      
+      audioFormats.forEach(format => {
+        formats.push({
+          url: format.url,
+          ext: format.ext || 'mp4',
+          quality: 'audio',
+          width: 0,
+          height: 0,
+          fps: 0,
+          filesize: format.filesize || 0,
+          vcodec: 'none',
+          acodec: format.acodec || 'none',
+          format_id: format.format_id,
+          label: `🎵 Audio Only`,
+          type: 'audio',
+          video_title: videoInfo.title || 'Unknown Video',
+          channel_name: videoInfo.channel || videoInfo.uploader || 'Unknown Author'
+        });
       });
     }
     

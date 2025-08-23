@@ -282,7 +282,7 @@ app.post('/discover', async (req, res) => {
   }
 });
 
-// Meta endpoint
+// Meta endpoint for Stremio
 app.post('/meta', async (req, res) => {
   try {
     const { videoId, api_key } = req.body;
@@ -336,7 +336,61 @@ app.post('/meta', async (req, res) => {
   }
 });
 
-// Stream endpoint
+// Meta endpoint for Stremio (GET method)
+app.get('/meta/:videoId.json', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    console.log(`📝 Getting meta for: ${videoId} (GET)`);
+    
+    // Use API key from query if provided, otherwise from config
+    const metaApiKey = req.query.api_key || req.query.youtube_api_key || config.get('api_key');
+    if (!metaApiKey) {
+      return res.status(400).json({ error: 'YouTube API key not provided' });
+    }
+    
+    // Create temporary YouTube API instance for this request
+    const tempYouTubeAPI = new YouTubeAPI(metaApiKey);
+    
+    try {
+      // Get video metadata using YouTube API
+      const video = await tempYouTubeAPI.getVideoInfo(videoId);
+      console.log(`✅ Meta retrieved for: ${video.title}`);
+      
+      // Convert to Stremio meta format
+      const meta = {
+        id: video.id,
+        name: video.title,
+        description: video.description,
+        poster: video.thumbnail,
+        background: video.thumbnail,
+        type: 'movie',
+        releaseInfo: video.publishedAt,
+        runtime: video.duration,
+        youtube: {
+          channelId: video.channelId,
+          channelTitle: video.channel,
+          viewCount: video.viewCount,
+          likeCount: video.likeCount
+        }
+      };
+      
+      res.json({ meta });
+    } catch (error) {
+      console.error(`❌ Failed to get video metadata: ${error.message}`);
+      res.status(404).json({ error: 'Video not found' });
+    }
+    
+  } catch (error) {
+    console.error('❌ Meta error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get video metadata', 
+      details: error.message 
+    });
+  }
+});
+
+// Stream endpoint for Stremio
 app.post('/stream', async (req, res) => {
   try {
     const { videoId } = req.body;
@@ -358,23 +412,36 @@ app.post('/stream', async (req, res) => {
         // Gateway returns array of format objects with bestvideo+bestaudio
         data.forEach(format => {
           if (format.url) {
-            // Create descriptive names based on format type
-            let name = format.label || 'Unknown Format';
+            // Get video info for better naming
+            let videoTitle = 'Unknown Video';
+            let channelName = 'Unknown Author';
             
-            // Add quality indicators
-            if (format.height) {
-              name = `${name} (${format.height}p)`;
+            // Try to extract video info from the format data
+            if (format.video_title) {
+              videoTitle = format.video_title;
             }
+            if (format.channel_name) {
+              channelName = format.channel_name;
+            }
+            
+            // Create descriptive names with OMG-Roma format
+            let quality = format.quality || 'Unknown Quality';
+            if (format.height) {
+              quality = `${format.height}p`;
+            }
+            
+            // Format: OMG-Roma: [Plugin] - [Video] ([Author]) - [Quality]
+            let name = `OMG-Roma: YouTube - ${videoTitle} (${channelName}) - ${quality}`;
             
             // Add type indicators
             if (format.type === 'combined') {
-              name = `🎬 ${name} - Best Quality`;
+              name += ' 🎬 Combined';
             } else if (format.type === 'video') {
-              name = `🎬 ${name} - Video Only`;
+              name += ' 🎬 Video Only';
             } else if (format.type === 'audio') {
-              name = `🎵 ${name} - Audio Only`;
+              name += ' 🎵 Audio Only';
             } else {
-              name = `📺 ${name}`;
+              name += ' 📺 Stream';
             }
             
             streams.push({
@@ -394,7 +461,7 @@ app.post('/stream', async (req, res) => {
       if (streams.length === 0) {
         const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
         streams.push({
-          name: '🎬 Best Available (Proxy)',
+          name: `OMG-Roma: YouTube - Unknown Video (Unknown Author) - Best Available 📺 Proxy`,
           url: `${gatewayUrl}/api/streaming/youtube/proxy/${videoId}?quality=best`,
           quality: 'best',
           type: 'proxy'
@@ -414,6 +481,101 @@ app.post('/stream', async (req, res) => {
       error: 'Failed to get video streams', 
       details: error.message,
       streams: []
+    });
+  }
+});
+
+// Stream endpoint for Stremio (GET method)
+app.get('/stream/:videoId.json', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    console.log(`🎬 Getting streams for: ${videoId} (GET)`);
+    
+    // Get multiple format options from gateway yt-dlp service
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      
+      // Create multiple stream options with different qualities
+      const streams = [];
+      
+      // Handle formats returned by gateway (bestvideo+bestaudio)
+      if (data && Array.isArray(data)) {
+        // Gateway returns array of format objects with bestvideo+bestaudio
+        data.forEach(format => {
+          if (format.url) {
+            // Get video info for better naming
+            let videoTitle = 'Unknown Video';
+            let channelName = 'Unknown Author';
+            
+            // Try to extract video info from the format data
+            if (format.video_title) {
+              videoTitle = format.video_title;
+            }
+            if (format.channel_name) {
+              channelName = format.channel_name;
+            }
+            
+            // Create descriptive names with OMG-Roma format
+            let quality = format.quality || 'Unknown Quality';
+            if (format.height) {
+              quality = `${format.height}p`;
+            }
+            
+            // Format: OMG-Roma: [Plugin] - [Video] ([Author]) - [Quality]
+            let name = `OMG-Roma: YouTube - ${videoTitle} (${channelName}) - ${quality}`;
+            
+            // Add type indicators
+            if (format.type === 'combined') {
+              name += ' 🎬 Combined';
+            } else if (format.type === 'video') {
+              name += ' 🎬 Video Only';
+            } else if (format.type === 'audio') {
+              name += ' 🎵 Audio Only';
+            } else {
+              name += ' 📺 Stream';
+            }
+            
+            streams.push({
+              name: name,
+              url: format.url,
+              quality: format.quality || 'unknown',
+              type: format.type || 'video',
+              height: format.height || 0,
+              width: format.width || 0,
+              ext: format.ext || 'mp4'
+            });
+          }
+        });
+      }
+      
+      // Fallback: if no formats found, create proxy stream
+      if (streams.length === 0) {
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        streams.push({
+          name: `OMG-Roma: YouTube - Unknown Video (Unknown Author) - Best Available 📺 Proxy`,
+          url: `${gatewayUrl}/api/streaming/youtube/proxy/${videoId}?quality=best`,
+          quality: 'best',
+          type: 'proxy'
+        });
+      }
+      
+      console.log(`✅ Found ${streams.length} stream options for: ${videoId}`);
+      res.json({ streams });
+    } else {
+      console.warn(`⚠️  Gateway error for streams: ${response.status}`);
+      res.json({ streams: [] });
+    }
+    
+  } catch (error) {
+    console.error('❌ Stream error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get video streams', 
+      details: error.message,
+      streams: [] 
     });
   }
 });
@@ -664,8 +826,8 @@ app.get('/channels', async (req, res) => {
   }
 });
 
-// Channel catalog endpoint for Stremio
-app.get('/catalog/channel/:channelId/:extra?.json', async (req, res) => {
+// YouTube catalog endpoint for Stremio
+app.get('/catalog/youtube/:channelId/:extra?.json', async (req, res) => {
   try {
     const { channelId, extra } = req.params;
     const { skip = 0, limit = 20 } = req.query;
@@ -720,6 +882,10 @@ app.get('/catalog/channel/:channelId/:extra?.json', async (req, res) => {
     });
   }
 });
+
+// Search catalog endpoint for Stremio - REMOVED from Scopri
+// This endpoint was creating an empty "Ricerca YouTube" entry in Stremio
+// Search functionality is still available via /search endpoint and other methods
 
 // Integration endpoints for centralized services
 app.get('/streaming/search', async (req, res) => {

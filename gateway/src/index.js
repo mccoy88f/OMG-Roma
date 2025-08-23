@@ -288,6 +288,31 @@ app.get('/api/streaming/:pluginId/subtitles/:videoId', async (req, res) => {
   }
 });
 
+// Combine video and audio streams endpoint
+app.get('/api/streaming/:pluginId/combine/:videoId', async (req, res) => {
+  try {
+    const { pluginId, videoId } = req.params;
+    const { video, audio } = req.query;
+    
+    if (!video || !audio) {
+      return res.status(400).json({ 
+        error: 'Missing video or audio format ID',
+        required: ['video', 'audio'],
+        received: { video, audio }
+      });
+    }
+    
+    console.log(`🎬 Combining streams for ${pluginId}:${videoId} (video: ${video}, audio: ${audio})`);
+    
+    // Use streaming manager to combine streams
+    await streamingManager.combineStreams(pluginId, videoId, video, audio, req, res);
+    
+  } catch (error) {
+    console.error('❌ Stream combine error:', error);
+    res.status(500).json({ error: 'Stream combine failed', details: error.message });
+  }
+});
+
 // Streaming statistics
 app.get('/api/streaming/stats', (req, res) => {
   try {
