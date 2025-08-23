@@ -58,14 +58,17 @@ class WebUI {
           });
         }
 
-        // Get config from plugin
-        const configResponse = await this.pluginManager.callPlugin(pluginId, 'config');
+        // Get config and schema from plugin
+        const [configResponse, schemaResponse] = await Promise.all([
+          this.pluginManager.getPluginConfig(pluginId),
+          this.pluginManager.getPluginConfigSchema(pluginId)
+        ]);
         
         res.json({
           success: true,
           pluginId,
           config: configResponse,
-          schema: plugin.config.config_schema || {}
+          schema: schemaResponse?.schema || plugin.config.config_schema || {}
         });
 
       } catch (error) {
@@ -462,44 +465,30 @@ class WebUI {
   async generateConfigParams() {
     try {
       const plugins = this.pluginManager.getAllPlugins();
-      const params = new URLSearchParams();
+      const configData = {};
       
       for (const plugin of plugins) {
         if (plugin.manifestEnabled === false) continue;
         
         const pluginId = plugin.id;
-        const config = plugin.config;
         
-        // Add plugin-specific configuration parameters
-        if (pluginId === 'youtube') {
-          if (config.api_key) {
-            params.append('youtube_api_key', config.api_key);
+        // Get current plugin configuration
+        try {
+          const currentConfig = await this.pluginManager.callPlugin(pluginId, 'config');
+          if (currentConfig && typeof currentConfig === 'object') {
+            configData[pluginId] = currentConfig;
           }
-          if (config.followed_channels && config.followed_channels.length > 0) {
-            params.append('youtube_channels', config.followed_channels.join(','));
-          }
-          if (config.search_mode) {
-            params.append('youtube_search_mode', config.search_mode);
-          }
-          if (config.video_limit) {
-            params.append('youtube_video_limit', config.video_limit);
-          }
-        }
-        
-        // Add other plugins as needed
-        if (pluginId === 'vimeo') {
-          if (config.api_key) {
-            params.append('vimeo_api_key', config.api_key);
-          }
-          if (config.playlists && config.playlists.length > 0) {
-            params.append('vimeo_playlists', config.playlists.join(','));
-          }
+        } catch (error) {
+          console.warn(`⚠️  Could not get config for ${pluginId}:`, error.message);
         }
       }
       
-      const configString = params.toString();
-      console.log(`🔧 Generated config params: ${configString}`);
-      return configString;
+      // Convert to JSON and encode in base64
+      const configJson = JSON.stringify(configData);
+      const configBase64 = Buffer.from(configJson).toString('base64');
+      
+      console.log(`🔧 Generated config (${configJson.length} chars) encoded in base64 (${configBase64.length} chars)`);
+      return configBase64;
       
     } catch (error) {
       console.error('❌ Error generating config params:', error);

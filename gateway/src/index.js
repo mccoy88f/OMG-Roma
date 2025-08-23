@@ -110,14 +110,29 @@ app.get('/catalog/:type/:catalogId/:extra?.json', async (req, res) => {
         const manifestUrl = new URL(referer);
         const manifestParams = new URLSearchParams(manifestUrl.search);
         
-        // Add plugin configs to extraParams
-        for (const [key, value] of manifestParams) {
-          if (key.startsWith('youtube_') || key.startsWith('vimeo_')) {
-            extraParams[key] = value;
+        // Check for base64 encoded config
+        const configParam = manifestParams.get('config');
+        if (configParam) {
+          try {
+            // Decode base64 config
+            const configJson = Buffer.from(configParam, 'base64').toString('utf8');
+            const pluginConfigs = JSON.parse(configJson);
+            
+            console.log(`🔧 Decoded plugin configs from manifest:`, Object.keys(pluginConfigs));
+            
+            // Add plugin configs to extraParams for each plugin
+            for (const [pluginId, config] of Object.entries(pluginConfigs)) {
+              for (const [key, value] of Object.entries(config)) {
+                extraParams[`${pluginId}_${key}`] = value;
+              }
+            }
+            
+          } catch (decodeError) {
+            console.warn('⚠️  Failed to decode base64 config:', decodeError.message);
           }
         }
         
-        console.log(`🔧 Added plugin configs from manifest:`, Object.keys(extraParams).filter(k => k.startsWith('youtube_') || k.startsWith('vimeo_')));
+        console.log(`🔧 Added plugin configs to extraParams:`, Object.keys(extraParams).filter(k => k.includes('_')));
       } catch (error) {
         console.warn('⚠️  Failed to parse manifest params from referer:', error.message);
       }

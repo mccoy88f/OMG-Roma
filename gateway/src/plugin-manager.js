@@ -431,6 +431,40 @@ class PluginManager {
     return status;
   }
 
+  async getPluginConfig(pluginId) {
+    try {
+      const plugin = this.plugins.get(pluginId);
+      if (!plugin) {
+        throw new Error(`Plugin ${pluginId} not found`);
+      }
+
+      const response = await this.callPlugin(pluginId, 'config');
+      return response;
+    } catch (error) {
+      console.error(`❌ Error getting plugin config for ${pluginId}:`, error);
+      throw error;
+    }
+  }
+
+  async getPluginConfigSchema(pluginId) {
+    try {
+      const plugin = this.plugins.get(pluginId);
+      if (!plugin) {
+        throw new Error(`Plugin ${pluginId} not found`);
+      }
+
+      const response = await this.callPlugin(pluginId, 'config/schema');
+      return response;
+    } catch (error) {
+      console.error(`❌ Error getting plugin config schema for ${pluginId}:`, error);
+      // Fallback to plugin.json config
+      return {
+        success: true,
+        schema: plugin.config.config_schema || {}
+      };
+    }
+  }
+
   startWatching() {
     if (this.watcher) {
       this.watcher.close();

@@ -115,7 +115,7 @@ app.post('/search', async (req, res) => {
     }
     
     // Use API key from request if provided, otherwise from config
-    const searchApiKey = api_key || config.get('api_key');
+    const searchApiKey = api_key || req.body.youtube_api_key || config.get('api_key');
     if (!searchApiKey) {
       throw new Error('YouTube API key not provided');
     }
@@ -159,7 +159,7 @@ app.post('/discover', async (req, res) => {
       
       try {
         // Use API key from request if provided, otherwise from config
-        const discoverApiKey = req.body.api_key || config.get('api_key');
+        const discoverApiKey = req.body.api_key || req.body.youtube_api_key || config.get('api_key');
         if (!discoverApiKey) {
           throw new Error('YouTube API key not provided');
         }
@@ -188,11 +188,17 @@ app.post('/discover', async (req, res) => {
     }
     
     // General discover: get videos from all followed channels
-    const followedChannels = config.get('followed_channels', []);
-    console.log(`📺 YouTube general discover (skip: ${skip}, limit: ${limit})`);
-    console.log(`Following ${followedChannels.length} channels`);
+    // Use channels from request if provided, otherwise from config
+    const followedChannels = req.body.youtube_followed_channels || config.get('followed_channels', []);
     
-    if (followedChannels.length === 0) {
+    // If channels are comma-separated string, split them
+    const channelList = Array.isArray(followedChannels) ? followedChannels : 
+                       (typeof followedChannels === 'string' ? followedChannels.split(',') : []);
+    
+    console.log(`📺 YouTube general discover (skip: ${skip}, limit: ${limit})`);
+    console.log(`Following ${channelList.length} channels`);
+    
+    if (channelList.length === 0) {
       return res.json({ 
         videos: [], 
         hasMore: false,
@@ -203,12 +209,12 @@ app.post('/discover', async (req, res) => {
     let allVideos = [];
     
     // Get videos from all followed channels using YouTube API
-    for (const channelUrl of followedChannels) {
+    for (const channelUrl of channelList) {
       try {
         console.log(`📡 Fetching videos from: ${channelUrl}`);
         
         // Use API key from request if provided, otherwise from config
-        const discoverApiKey = req.body.api_key || config.get('api_key');
+        const discoverApiKey = req.body.api_key || req.body.youtube_api_key || config.get('api_key');
         if (!discoverApiKey) {
           throw new Error('YouTube API key not provided');
         }
@@ -222,7 +228,7 @@ app.post('/discover', async (req, res) => {
         
         // Get videos from channel using YouTube API
         const channelResult = await tempYouTubeAPI.getChannelVideos(channelId, {
-          limit: Math.ceil(limit / followedChannels.length),
+          limit: Math.ceil(limit / channelList.length),
           skip: 0
         });
         
@@ -267,7 +273,7 @@ app.post('/meta', async (req, res) => {
     console.log(`📝 Getting meta for: ${videoId}`);
     
     // Use API key from request if provided, otherwise from config
-    const metaApiKey = api_key || config.get('api_key');
+    const metaApiKey = api_key || req.body.youtube_api_key || config.get('api_key');
     if (!metaApiKey) {
       throw new Error('YouTube API key not provided');
     }
@@ -405,6 +411,25 @@ app.get('/config', (req, res) => {
   res.json(config.getAll());
 });
 
+// Get configuration schema
+app.get('/config/schema', (req, res) => {
+  try {
+    const pluginInfo = require('../plugin.json');
+    res.json({
+      success: true,
+      pluginId: pluginInfo.id,
+      schema: pluginInfo.config_schema || {},
+      description: pluginInfo.description
+    });
+  } catch (error) {
+    console.error('❌ Error loading config schema:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load configuration schema' 
+    });
+  }
+});
+
 // Channel catalog endpoint for Stremio
 app.get('/catalog/channel/:channelId/:extra?.json', async (req, res) => {
   try {
@@ -414,7 +439,7 @@ app.get('/catalog/channel/:channelId/:extra?.json', async (req, res) => {
     console.log(`📺 Channel catalog request: ${channelId} (skip: ${skip}, limit: ${limit})`);
     
     // Use API key from query if provided, otherwise from config
-    const apiKey = req.query.api_key || config.get('api_key');
+    const apiKey = req.query.api_key || req.query.youtube_api_key || config.get('api_key');
     if (!apiKey) {
       return res.status(400).json({ error: 'YouTube API key not provided' });
     }
