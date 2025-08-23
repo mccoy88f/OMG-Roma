@@ -412,7 +412,7 @@ app.get('/config', (req, res) => {
   res.json(config.getAll());
 });
 
-// Get configuration schema
+t// Get configuration schema
 app.get('/config/schema', (req, res) => {
   try {
     const pluginInfo = require('../plugin.json');

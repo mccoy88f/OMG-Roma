@@ -277,7 +277,11 @@ function copyManifestUrl() {
 function openStremio() {
     // Open Stremio desktop app with the manifest URL
     const manifestUrl = document.getElementById('manifestUrl').textContent;
-    window.open(`stremio://${manifestUrl}`, '_blank');
+    
+    // Remove protocol from URL for Stremio (e.g., "https://example.com" -> "example.com")
+    const cleanUrl = manifestUrl.replace(/^https?:\/\//, '');
+    
+    window.open(`stremio://${cleanUrl}`, '_blank');
 }
 
 async function regenerateManifest() {

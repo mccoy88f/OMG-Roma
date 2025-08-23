@@ -105,7 +105,11 @@ class WebUI {
           const manifestUpdate = await stremioAdapter.regenerateManifestForPlugin(pluginId);
           
           // Generate new manifest URL
-          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          // Force HTTPS for production URLs
+          const host = req.get('host');
+          const baseUrl = host.includes('localhost') || host.includes('127.0.0.1') 
+            ? `${req.protocol}://${host}`
+            : `https://${host}`;
           const newManifestUrl = `${baseUrl}/manifest.json?config=${manifestUpdate.configHash}`;
           
           res.json({
@@ -221,7 +225,11 @@ class WebUI {
         const manifest = await stremioAdapter.generateManifest(configParams);
         
         // Generate personalized manifest URL with all plugin configs
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        // Force HTTPS for production URLs
+        const host = req.get('host');
+        const baseUrl = host.includes('localhost') || host.includes('127.0.0.1') 
+          ? `${req.protocol}://${host}`
+          : `https://${host}`;
         const manifestUrl = configParams 
           ? `${baseUrl}/manifest.json?${configParams}`
           : `${baseUrl}/manifest.json`;
@@ -259,7 +267,11 @@ class WebUI {
         const manifest = await stremioAdapter.generateManifest(configParams);
         
         // Generate new manifest URL
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        // Force HTTPS for production URLs
+        const host = req.get('host');
+        const baseUrl = host.includes('localhost') || host.includes('127.0.0.1') 
+          ? `${req.protocol}://${host}`
+          : `https://${host}`;
         const manifestUrl = configParams 
           ? `${baseUrl}/manifest.json?${configParams}`
           : `${baseUrl}/manifest.json`;
@@ -312,7 +324,11 @@ class WebUI {
         const manifestUpdate = await stremioAdapter.regenerateManifestForPlugin(pluginId);
         
         // Generate new manifest URL
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        // Force HTTPS for production URLs
+        const host = req.get('host');
+        const baseUrl = host.includes('localhost') || host.includes('127.0.0.1') 
+          ? `${req.protocol}://${host}`
+          : `https://${host}`;
         const newManifestUrl = `${baseUrl}/manifest.json?config=${manifestUpdate.configHash}`;
         
         res.json({
@@ -364,7 +380,11 @@ class WebUI {
         
         // Generate new manifest URL
         const configParams = await this.generateConfigParams();
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        // Force HTTPS for production URLs
+        const host = req.get('host');
+        const baseUrl = host.includes('localhost') || host.includes('127.0.0.1') 
+          ? `${req.protocol}://${host}`
+          : `https://${host}`;
         const newManifestUrl = configParams 
           ? `${baseUrl}/manifest.json?${configParams}`
           : `${baseUrl}/manifest.json`;
