@@ -37,7 +37,7 @@ async function initializeServices() {
   }
 }
 
-// Plugin info endpoint with dynamic extra options
+// Plugin info endpoint
 app.get('/plugin.json', (req, res) => {
   try {
     console.log('📄 Plugin info endpoint called');
@@ -45,34 +45,6 @@ app.get('/plugin.json', (req, res) => {
     console.log('📁 Files in current directory:', require('fs').readdirSync('.'));
     
     const pluginInfo = require('../plugin.json');
-    
-    // Dynamically update extra options with followed channels
-    if (pluginInfo.extra && pluginInfo.extra.length > 0) {
-      const filterExtra = pluginInfo.extra.find(extra => extra.name === 'filter');
-      if (filterExtra) {
-        // Get followed channels from config
-        const followedChannels = config ? config.get('followed_channels', []) : [];
-        
-        // Build filter options: all + individual channels
-        const filterOptions = ['all'];
-        followedChannels.forEach(channel => {
-          // Extract channel name/ID for filter
-          let channelName = channel;
-          if (channel.includes('channel/')) {
-            channelName = channel.split('channel/')[1].split('/')[0];
-          } else if (channel.includes('@')) {
-            channelName = channel.split('@')[1].split('/')[0];
-          } else if (channel.includes('youtube.com/')) {
-            channelName = channel.split('youtube.com/')[1].split('/')[0];
-          }
-          filterOptions.push(channelName);
-        });
-        
-        filterExtra.options = filterOptions;
-        console.log(`🔧 Updated filter options: ${filterOptions.join(', ')}`);
-      }
-    }
-    
     console.log('✅ Plugin info loaded successfully:', pluginInfo.id, pluginInfo.name);
     res.json(pluginInfo);
   } catch (error) {
@@ -464,11 +436,11 @@ app.post('/stream', async (req, res) => {
         let bestQuality = 'Unknown Quality';
         
         // Try to extract video info from the first format
-        if (data[0] && data[0].title) {
-          videoTitle = data[0].title;
+        if (data[0] && data[0].video_title) {
+          videoTitle = data[0].video_title;
         }
-        if (data[0] && data[0].channel) {
-          channelName = data[0].channel;
+        if (data[0] && data[0].channel_name) {
+          channelName = data[0].channel_name;
         }
         
         // Find best quality from available formats
@@ -629,11 +601,11 @@ app.get('/stream/:videoId.json', async (req, res) => {
         let bestQuality = 'Unknown Quality';
         
         // Try to extract video info from the first format
-        if (data[0] && data[0].title) {
-          videoTitle = data[0].title;
+        if (data[0] && data[0].video_title) {
+          videoTitle = data[0].video_title;
         }
-        if (data[0] && data[0].channel) {
-          channelName = data[0].channel;
+        if (data[0] && data[0].channel_name) {
+          channelName = data[0].channel_name;
         }
         
         // Find best quality from available formats
@@ -946,16 +918,9 @@ app.get('/channels', async (req, res) => {
 app.get('/catalog/channels/YouTube/:extra?.json', async (req, res) => {
   try {
     const { extra } = req.params;
-    const { skip = 0, limit = 20 } = req.query;
+    const { skip = 0, limit = 20, filter } = req.query;
     
-    // Parse extra parameter for filtering (Stremio standard format)
-    let channelFilter = 'all';
-    if (extra && extra !== 'all') {
-      // extra can be channel ID or channel name
-      channelFilter = extra;
-    }
-    
-    console.log(`📺 YouTube channels catalog request (skip: ${skip}, limit: ${limit}, filter: ${channelFilter})`);
+    console.log(`📺 YouTube channels catalog request (skip: ${skip}, limit: ${limit}, filter: ${filter || 'all'})`);
     
     // Use API key from query if provided, otherwise from config
     const apiKey = req.query.api_key || req.query.youtube_api_key || config.get('api_key');
@@ -976,9 +941,9 @@ app.get('/catalog/channels/YouTube/:extra?.json', async (req, res) => {
     
     let allVideos = [];
     
-    if (channelFilter && channelFilter !== 'all') {
-      // Filter by specific channel using extra parameter
-      const cleanChannelId = channelFilter.includes(':') ? channelFilter.split(':')[1] : channelFilter;
+    if (filter) {
+      // Filter by specific channel
+      const cleanChannelId = filter.includes(':') ? filter.split(':')[1] : filter;
       
       console.log(`🎯 Filtering by channel: ${cleanChannelId}`);
       

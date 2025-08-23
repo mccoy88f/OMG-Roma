@@ -26,6 +26,15 @@
     "discover_catalog_id": "youtube_channels"
   },
   
+  "extra": [
+    {
+      "name": "filter",
+      "options": ["all"],
+      "default": "all",
+      "description": "Filter videos by specific channel"
+    }
+  ],
+  
   "config_schema": {
     "api_key": {
       "type": "string",
