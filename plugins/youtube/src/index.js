@@ -357,46 +357,45 @@ app.get('/meta/:videoId.json', async (req, res) => {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
     
-    // Get video info from gateway (centralized)
-    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${cleanVideoId}`);
+    // Get video info directly from YouTube API (not from gateway)
+    const apiKey = req.query.api_key || req.query.youtube_api_key || config.get('api_key');
+    if (!apiKey) {
+      return res.status(400).json({ error: 'YouTube API key not provided' });
+    }
     
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const tempYouTubeAPI = new YouTubeAPI(apiKey);
+      const video = await tempYouTubeAPI.getVideoInfo(cleanVideoId);
       
-      if (data && Array.isArray(data) && data.length > 0) {
-        const videoInfo = data[0];
-        
-        // Create meta response following Stremio format
-        const meta = {
-          id: `youtube:${cleanVideoId}`,
-          type: 'movie',
-          name: videoInfo.title || 'Unknown Title',
-          description: videoInfo.description || '',
-          poster: videoInfo.thumbnail || '',
-          background: videoInfo.thumbnail || '',
-          cast: [videoInfo.channel || 'Unknown Channel'],
-          director: videoInfo.channel || 'Unknown Channel',
-          genre: ['YouTube'],
-          releaseInfo: videoInfo.publishedAt ? new Date(videoInfo.publishedAt).getFullYear().toString() : 'Unknown',
-          runtime: videoInfo.duration ? Math.floor(videoInfo.duration / 60) + ':' + (videoInfo.duration % 60).toString().padStart(2, '0') : 'Unknown',
-          videos: [
-            {
-              id: `youtube:${cleanVideoId}`,
-              name: videoInfo.title || 'Unknown Title',
-              released: videoInfo.publishedAt ? new Date(videoInfo.publishedAt).getFullYear().toString() : 'Unknown'
-            }
-          ]
-        };
-        
-        console.log(`✅ Meta created for: ${cleanVideoId}`);
-        res.json({ meta });
-      } else {
-        console.warn(`⚠️  No video info found for: ${cleanVideoId}`);
-        res.status(404).json({ error: 'Video not found' });
-      }
-    } else {
-      console.warn(`⚠️  Gateway error for meta: ${response.status}`);
+      console.log(`✅ Meta retrieved directly from YouTube API: ${video.title}`);
+      
+      // Create meta response following Stremio format
+      const meta = {
+        id: `youtube:${cleanVideoId}`,
+        type: 'movie',
+        name: video.title,
+        description: video.description,
+        poster: video.thumbnail,
+        background: video.thumbnail,
+        cast: [video.channel],
+        director: video.channel,
+        genre: ['YouTube'],
+        releaseInfo: video.publishedAt,
+        runtime: video.duration,
+        videos: [
+          {
+            id: `youtube:${cleanVideoId}`,
+            name: video.title,
+            released: video.publishedAt
+          }
+        ]
+      };
+      
+      console.log(`✅ Meta created for: ${cleanVideoId}`);
+      res.json({ meta });
+      
+    } catch (error) {
+      console.error(`❌ YouTube API error for ${cleanVideoId}:`, error.message);
       res.status(404).json({ error: 'Video not found' });
     }
     
@@ -423,64 +422,42 @@ app.post('/stream', async (req, res) => {
       return res.status(400).json({ error: 'Invalid video ID', streams: [] });
     }
     
-    // Get multiple format options from gateway yt-dlp service
+    // Get direct stream URL from gateway yt-dlp service (bestvideo+bestaudio)
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${cleanVideoId}`);
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/stream/${cleanVideoId}?format=bestvideo+bestaudio`);
     
     if (response.ok) {
-      const data = await response.json();
+      const streamData = await response.json();
       
-      // Create multiple stream options with different qualities
+      // Create single combined stream with direct URL
       const streams = [];
       
-      // Handle formats returned by gateway - Create single combined stream like OMG-youtube
-      if (data && Array.isArray(data)) {
-        // Get video info for naming
-        let videoTitle = 'Unknown Video';
-        let channelName = 'Unknown Author';
-        let bestQuality = 'Unknown Quality';
+      if (streamData && streamData.url) {
+        // Get video info for naming (from stream data or fallback)
+        let videoTitle = streamData.title || 'Unknown Video';
+        let channelName = streamData.channel || 'Unknown Author';
+        let bestQuality = streamData.quality || 'Best Available';
         
-        // Try to extract video info from the first format
-        if (data[0] && data[0].title) {
-          videoTitle = data[0].title;
-        }
-        if (data[0] && data[0].channel) {
-          channelName = data[0].channel;
-        }
-        
-        // Find best quality from available formats
-        const videoFormats = data.filter(f => f.type === 'video' && f.height);
-        if (videoFormats.length > 0) {
-          const bestVideo = videoFormats.reduce((best, current) => 
-            (current.height || 0) > (best.height || 0) ? current : best
-          );
-          bestQuality = `${bestVideo.height}p`;
-        }
-        
-        // Create REAL combined stream using bestvideo+bestaudio (like OMG-youtube)
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-        // Use the actual combined stream URL from gateway, not proxy
-        const combinedUrl = `${gatewayUrl}/api/streaming/youtube/formats/${cleanVideoId}?format=bestvideo+bestaudio`;
-        
-        // Single stream with OMG-Roma format
+        // Single stream with OMG-Roma format and DIRECT URL
         const name = `OMG-Roma: YouTube`;
         const title = `${videoTitle} (${channelName}) - ${bestQuality}`;
         
         streams.push({
           name: name,
           title: title,
-          url: combinedUrl,
+          url: streamData.url,  // Direct URL from yt-dlp, no proxy!
           behaviorHints: {
             bingeWatch: true
           }
         });
         
-        console.log(`✅ Created real combined stream: ${name} - ${title}`);
+        console.log(`✅ Created direct combined stream: ${name} - ${title}`);
+        console.log(`🔗 Direct URL: ${streamData.url}`);
       }
       
-      // Fallback: if no formats found, create proxy stream
+      // Fallback: if no direct stream, create proxy stream
       if (streams.length === 0) {
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+        console.warn(`⚠️  No direct stream found, falling back to proxy`);
         streams.push({
           name: `OMG-Roma: YouTube`,
           title: `Unknown Video (Unknown Author) - Best Available`,
@@ -494,8 +471,18 @@ app.post('/stream', async (req, res) => {
       console.log(`✅ Found ${streams.length} stream options for: ${cleanVideoId}`);
       res.json({ streams });
     } else {
-      console.warn(`⚠️  Gateway error for streams: ${response.status}`);
-      res.json({ streams: [] });
+      console.warn(`⚠️  Gateway error for direct stream: ${response.status}`);
+      // Fallback to proxy if direct stream fails
+      console.log(`🔄 Falling back to proxy stream`);
+      streams.push({
+        name: `OMG-Roma: YouTube`,
+        title: `Unknown Video (Unknown Author) - Best Available`,
+        url: `${gatewayUrl}/api/streaming/youtube/proxy/${cleanVideoId}?quality=best`,
+        behaviorHints: {
+          bingeWatch: true
+        }
+      });
+      res.json({ streams });
     }
     
   } catch (error) {
@@ -508,71 +495,8 @@ app.post('/stream', async (req, res) => {
   }
 });
 
-// Meta endpoint for Stremio (GET method)
-app.get('/meta/:videoId.json', async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    
-    // Handle Stremio format: youtube:videoId -> videoId
-    const cleanVideoId = videoId && videoId.includes(':') ? videoId.split(':')[1] : videoId;
-    
-    console.log(`📝 Getting meta for: ${videoId} (cleaned: ${cleanVideoId})`);
-    
-    if (!cleanVideoId) {
-      return res.status(400).json({ error: 'Invalid video ID' });
-    }
-    
-    // Get video info from gateway
-    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${cleanVideoId}`);
-    
-    if (response.ok) {
-      const data = await response.json();
-      
-      if (data && Array.isArray(data) && data.length > 0) {
-        const videoInfo = data[0];
-        
-        // Create meta response following Stremio format
-        const meta = {
-          id: `youtube:${cleanVideoId}`,
-          type: 'movie',
-          name: videoInfo.title || 'Unknown Title',
-          description: videoInfo.description || '',
-          poster: videoInfo.thumbnail || '',
-          background: videoInfo.thumbnail || '',
-          cast: [videoInfo.channel || 'Unknown Channel'],
-          director: videoInfo.channel || 'Unknown Channel',
-          genre: ['YouTube'],
-          releaseInfo: videoInfo.publishedAt ? new Date(videoInfo.publishedAt).getFullYear().toString() : 'Unknown',
-          runtime: videoInfo.duration ? Math.floor(videoInfo.duration / 60) + ':' + (videoInfo.duration % 60).toString().padStart(2, '0') : 'Unknown',
-          videos: [
-            {
-              id: `youtube:${cleanVideoId}`,
-              name: videoInfo.title || 'Unknown Title',
-              released: videoInfo.publishedAt ? new Date(videoInfo.publishedAt).getFullYear().toString() : 'Unknown'
-            }
-          ]
-        };
-        
-        console.log(`✅ Meta created for: ${cleanVideoId}`);
-        res.json({ meta });
-      } else {
-        console.warn(`⚠️  No video info found for: ${cleanVideoId}`);
-        res.status(404).json({ error: 'Video not found' });
-      }
-    } else {
-      console.warn(`⚠️  Gateway error for meta: ${response.status}`);
-      res.status(404).json({ error: 'Video not found' });
-    }
-    
-  } catch (error) {
-    console.error('❌ Meta error:', error);
-    res.status(500).json({ 
-      error: 'Failed to get video metadata', 
-      details: error.message
-    });
-  }
-});
+// Meta endpoint for Stremio (GET method) - REMOVED DUPLICATE
+// Using centralized endpoint at line 345
 
 // Stream endpoint for Stremio (GET method - redirects to POST for consistency)
 app.get('/stream/:videoId.json', async (req, res) => {
