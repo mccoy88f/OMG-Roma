@@ -451,50 +451,47 @@ class WebUI {
        }
      });
 
-     // Get test form configuration for a plugin
-     this.router.get('/plugins/:pluginId/test-form', async (req, res) => {
-       try {
-         const { pluginId } = req.params;
-         
-         const plugin = this.pluginManager.plugins.get(pluginId);
-         if (!plugin) {
-           return res.status(404).json({ 
-             success: false, 
-             error: 'Plugin not found' 
-           });
-         }
+           // Get test form configuration for a plugin
+      this.router.get('/plugins/:pluginId/test-form', async (req, res) => {
+        try {
+          const { pluginId } = req.params;
+          
+          const plugin = this.pluginManager.plugins.get(pluginId);
+          if (!plugin) {
+            return res.status(404).json({ 
+              success: false, 
+              error: 'Plugin not found' 
+            });
+          }
 
-         // Get current config and schema
-         const [currentConfig, schemaResponse] = await Promise.all([
-           this.pluginManager.getPluginConfig(pluginId),
-           this.pluginManager.getPluginConfigSchema(pluginId)
-         ]);
+          // Get current config and schema
+          const [currentConfig, schemaResponse] = await Promise.all([
+            this.pluginManager.getPluginConfig(pluginId),
+            this.pluginManager.getPluginConfigSchema(pluginId)
+          ]);
 
-         // Get available test types from plugin
-         const testTypes = [
-           { id: 'search', name: 'Test Ricerca', description: 'Testa la funzionalità di ricerca' },
-           { id: 'discover', name: 'Test Discover', description: 'Testa la funzionalità di discover' },
-           { id: 'meta', name: 'Test Metadata', description: 'Testa il recupero metadata video' },
-           { id: 'stream', name: 'Test Streaming', description: 'Testa la funzionalità di streaming' }
-         ];
+          // Get available test types from plugin
+          const testTypes = [
+            { id: 'search', name: 'Test Ricerca', description: 'Testa la funzionalità di ricerca' },
+            { id: 'discover', name: 'Test Discover', description: 'Testa la funzionalità di discover' },
+            { id: 'meta', name: 'Test Metadata', description: 'Testa il recupero metadata video' },
+            { id: 'stream', name: 'Test Streaming', description: 'Testa la funzionalità di streaming' }
+          ];
 
-         res.json({
-           success: true,
-           pluginId,
-           testTypes,
-           currentConfig,
-           schema: schemaResponse?.schema || plugin.config.config_schema || {},
-           description: plugin.config.description
-         });
+          // Return HTML page instead of JSON
+          const html = generateTestFormHTML(pluginId, testTypes, currentConfig, schemaResponse?.schema || plugin.config.config_schema || {}, plugin.config.description);
+          
+          res.setHeader('Content-Type', 'text/html');
+          res.send(html);
 
-       } catch (error) {
-         console.error('❌ Error getting test form:', error);
-         res.status(500).json({ 
-           success: false, 
-           error: 'Failed to get test form configuration' 
-         });
-       }
-     });
+        } catch (error) {
+          console.error('❌ Error getting test form:', error);
+          res.status(500).json({ 
+            success: false, 
+            error: 'Failed to get test form configuration' 
+          });
+        }
+      });
 
     // Get plugin logs (if available)
     this.router.get('/plugins/:pluginId/logs', (req, res) => {
@@ -543,6 +540,257 @@ class WebUI {
       console.error('❌ Error generating config params:', error);
       return null;
     }
+  }
+
+  generateTestFormHTML(pluginId, testTypes, currentConfig, schema, description) {
+    const configFields = Object.entries(schema).map(([key, schemaInfo]) => {
+      const value = currentConfig[key] || schemaInfo.default || '';
+      let inputField = '';
+      
+      if (schemaInfo.type === 'boolean') {
+        inputField = `<input type="checkbox" name="${key}" ${value ? 'checked' : ''}>`;
+      } else if (schemaInfo.enum) {
+        inputField = `
+          <select name="${key}">
+            ${schemaInfo.enum.map(option => `
+              <option value="${option}" ${value === option ? 'selected' : ''}>${option}</option>
+            `).join('')}
+          </select>
+        `;
+      } else if (schemaInfo.type === 'array') {
+        const arrayValue = Array.isArray(value) ? value.join('\n') : '';
+        inputField = `<textarea name="${key}" rows="3" placeholder="Un elemento per riga">${arrayValue}</textarea>`;
+      } else if (schemaInfo.type === 'integer') {
+        inputField = `<input type="number" name="${key}" value="${value}" min="${schemaInfo.minimum || 0}" max="${schemaInfo.maximum || 999}">`;
+      } else {
+        inputField = `<input type="text" name="${key}" value="${value}" placeholder="${schemaInfo.default || ''}">`;
+      }
+      
+      return `
+        <div class="form-group">
+          <label><strong>${key}:</strong></label>
+          ${inputField}
+          <small class="description">${schemaInfo.description || ''}</small>
+        </div>
+      `;
+    }).join('');
+
+    return `
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Form - ${pluginId}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        .form-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+        }
+        .description {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            display: none;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Form - ${pluginId}</h1>
+        <p class="description">${description}</p>
+        
+        <div class="form-section">
+            <h3>⚙️ Configurazione Test</h3>
+            <form id="testForm">
+                <div class="form-group">
+                    <label><strong>Tipo di Test:</strong></label>
+                    <select name="testType" required>
+                        ${testTypes.map(type => `
+                            <option value="${type.id}">${type.name} - ${type.description}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label><strong>Query di Test:</strong></label>
+                    <input type="text" name="query" value="test" placeholder="Inserisci query di test">
+                </div>
+                
+                <div class="form-group">
+                    <label><strong>Parametri di Configurazione:</strong></label>
+                    <small class="description">Configurazione temporanea per il test (non viene salvata)</small>
+                    ${configFields}
+                </div>
+                
+                <button type="submit" class="btn">🚀 Esegui Test</button>
+                <button type="button" class="btn btn-secondary" onclick="window.close()">❌ Chiudi</button>
+            </form>
+        </div>
+        
+        <div class="loading" id="loading">⏳ Esecuzione test in corso...</div>
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const testData = {};
+            
+            for (const [key, value] of formData.entries()) {
+                if (key === 'testType' || key === 'query') {
+                    testData[key] = value;
+                } else {
+                    // Handle different input types
+                    const field = this.querySelector(\`[name="\${key}"]\`);
+                    if (field.type === 'checkbox') {
+                        testData[key] = field.checked;
+                    } else if (field.tagName === 'TEXTAREA') {
+                        testData[key] = value.split('\\n').filter(line => line.trim());
+                    } else if (field.type === 'number') {
+                        testData[key] = parseInt(value) || 0;
+                    } else {
+                        testData[key] = value;
+                    }
+                }
+            }
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            
+            try {
+                const response = await fetch(\`/api/plugins/${pluginId}/test\`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                const result = await response.json();
+                
+                const resultDiv = document.getElementById('result');
+                if (result.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = \`
+                        <h4>✅ Test Completato con Successo!</h4>
+                        <p><strong>Tipo:</strong> \${result.testType}</p>
+                        <p><strong>Durata:</strong> \${result.duration}</p>
+                        <p><strong>Risultato:</strong> \${JSON.stringify(result.result, null, 2)}</p>
+                    \`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = \`
+                        <h4>❌ Test Fallito</h4>
+                        <p><strong>Errore:</strong> \${result.error}</p>
+                        <p><strong>Durata:</strong> \${result.duration}</p>
+                    \`;
+                }
+                resultDiv.style.display = 'block';
+                
+            } catch (error) {
+                const resultDiv = document.getElementById('result');
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = \`
+                    <h4>❌ Errore di Connessione</h4>
+                    <p><strong>Errore:</strong> \${error.message}</p>
+                \`;
+                resultDiv.style.display = 'block';
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+    `;
   }
 }
 

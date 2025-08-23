@@ -96,7 +96,8 @@ function renderDashboard() {
 
             <div style="margin-top: 15px;">
                 <button class="btn" data-action="configure" data-plugin-id="${plugin.id}">⚙️ Configura</button>
-                <button class="btn btn-secondary" data-action="test" data-plugin-id="${plugin.id}">🧪 Test</button>
+                <button class="btn btn-secondary" data-action="test" data-plugin-id="${plugin.id}">🧪 Esegui Prova di Funzionamento</button>
+                <button class="btn btn-info" data-action="open-test-form" data-plugin-id="${plugin.id}">📋 Apri Test Form</button>
             </div>
         </div>
     `).join('');
@@ -245,7 +246,7 @@ async function saveConfig(pluginId) {
 
 async function testPlugin(pluginId) {
     try {
-        showSuccess('🧪 Test del plugin in corso...');
+        showSuccess('🧪 Esecuzione prova di funzionamento in corso...');
 
         const response = await fetch(`/api/plugins/${pluginId}/test`, {
             method: 'POST',
@@ -256,15 +257,20 @@ async function testPlugin(pluginId) {
         const result = await response.json();
 
         if (result.success) {
-            showSuccess(`✅ Test completato! Trovati ${result.result.videoCount} video in ${result.duration}`);
+            showSuccess(`✅ Prova completata! Trovati ${result.result.videoCount} video in ${result.duration}`);
         } else {
-            showError(`❌ Test fallito: ${result.error}`);
+            showError(`❌ Prova fallita: ${result.error}`);
         }
 
     } catch (error) {
         console.error('Error testing plugin:', error);
-        showError('Errore durante il test del plugin');
+        showError('Errore durante la prova di funzionamento');
     }
+}
+
+function openTestForm(pluginId) {
+    // Open test form in new tab
+    window.open(`/api/plugins/${pluginId}/test-form`, '_blank');
 }
 
 function copyManifestUrl() {
@@ -505,6 +511,9 @@ document.addEventListener('click', function(event) {
             break;
         case 'test':
             if (pluginId) testPlugin(pluginId);
+            break;
+        case 'open-test-form':
+            if (pluginId) openTestForm(pluginId);
             break;
         case 'copy-manifest':
             copyManifestUrl();
