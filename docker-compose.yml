@@ -15,11 +15,12 @@ services:
     volumes:
       - omg_roma_config:/app/config
       - omg_roma_plugins:/app/plugins
-    depends_on:
-      - youtube-plugin
+    # Gateway starts first (no dependencies)
+    # Provides centralized services for plugins
     networks:
       - omg-roma-network
     restart: unless-stopped
+    # Gateway starts first and provides centralized services
     labels:
       - "traefik.enable=false"
 
@@ -40,6 +41,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+    # Plugin waits for gateway to be healthy before starting
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/ready"]
       interval: 30s
