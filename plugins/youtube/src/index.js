@@ -151,7 +151,7 @@ app.post('/search', async (req, res) => {
 // Discover endpoint
 app.post('/discover', async (req, res) => {
   try {
-    const { skip = 0, limit = 20, catalogId } = req.body;
+    const { skip = 0, limit = 20, catalogId, channelFilter } = req.body;
     
     // If catalogId is provided, it's a specific channel request
     if (catalogId && catalogId.startsWith('youtube_channel_')) {
@@ -207,10 +207,24 @@ app.post('/discover', async (req, res) => {
       });
     }
     
+    // Apply channel filter if specified
+    let filteredChannels = channelList;
+    if (channelFilter && channelFilter !== 'all') {
+      // Find channel by name or ID
+      const filteredChannel = channelList.find(channel => 
+        channel.includes(channelFilter) || 
+        channel.toLowerCase().includes(channelFilter.toLowerCase())
+      );
+      if (filteredChannel) {
+        filteredChannels = [filteredChannel];
+        console.log(`🔍 Filtering by channel: ${filteredChannel}`);
+      }
+    }
+    
     let allVideos = [];
     
-    // Get videos from all followed channels using YouTube API
-    for (const channelUrl of channelList) {
+    // Get videos from filtered channels using YouTube API
+    for (const channelUrl of filteredChannels) {
       try {
         console.log(`📡 Fetching videos from: ${channelUrl}`);
         
@@ -229,7 +243,7 @@ app.post('/discover', async (req, res) => {
         
         // Get videos from channel using YouTube API
         const channelResult = await tempYouTubeAPI.getChannelVideos(channelId, {
-          limit: Math.ceil(limit / channelList.length),
+          limit: Math.ceil(limit / filteredChannels.length),
           skip: 0
         });
         
@@ -252,7 +266,9 @@ app.post('/discover', async (req, res) => {
     
     res.json({ 
       videos: paginatedVideos, 
-      hasMore 
+      hasMore,
+      channelFilter: channelFilter || 'all',
+      totalChannels: filteredChannels.length
     });
     
   } catch (error) {
@@ -286,7 +302,26 @@ app.post('/meta', async (req, res) => {
       // Get video metadata using YouTube API
       const video = await tempYouTubeAPI.getVideoInfo(videoId);
       console.log(`✅ Meta retrieved for: ${video.title}`);
-      res.json({ video });
+      
+      // Convert to Stremio meta format
+      const meta = {
+        id: video.id,
+        name: video.title,
+        description: video.description,
+        poster: video.thumbnail,
+        background: video.thumbnail,
+        type: 'movie',
+        releaseInfo: video.publishedAt,
+        runtime: video.duration,
+        youtube: {
+          channelId: video.channelId,
+          channelTitle: video.channel,
+          viewCount: video.viewCount,
+          likeCount: video.likeCount
+        }
+      };
+      
+      res.json({ meta });
     } catch (error) {
       console.error(`❌ Failed to get video metadata: ${error.message}`);
       res.status(404).json({ error: 'Video not found' });
@@ -536,8 +571,9 @@ app.post('/test', async (req, res) => {
             duration: `${Date.now() - startTime}ms`,
             result: {
               videoId: testVideoId,
-              video: videoMeta,
-              metadataRetrieved: !!videoMeta
+              meta: videoMeta,
+              metadataRetrieved: !!videoMeta,
+              title: videoMeta?.title || 'Unknown'
             }
           };
           break;
@@ -595,6 +631,35 @@ app.post('/test', async (req, res) => {
       success: false, 
       error: 'Test failed', 
       details: error.message 
+    });
+  }
+});
+
+// Get list of followed channels
+app.get('/channels', async (req, res) => {
+  try {
+    const followedChannels = config.get('followed_channels', []);
+    const channelList = Array.isArray(followedChannels) ? followedChannels : 
+                       (typeof followedChannels === 'string' ? followedChannels.split(',') : []);
+    
+    console.log(`📺 Getting list of ${channelList.length} followed channels`);
+    
+    res.json({
+      success: true,
+      channels: channelList.map(channel => ({
+        url: channel,
+        name: channel.split('/').pop() || channel,
+        type: 'youtube'
+      })),
+      total: channelList.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error getting channels:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get channels list',
+      channels: []
     });
   }
 });
