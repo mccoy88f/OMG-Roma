@@ -7,6 +7,7 @@ RUN apt-get update \
     curl \
     bash \
     git \
+    procps \
   && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
