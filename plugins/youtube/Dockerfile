@@ -1,24 +1,14 @@
 FROM node:20-bookworm-slim
 
-# Install system dependencies including yt-dlp
+# Install minimal system dependencies (yt-dlp is centralized in gateway)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     bash \
     git \
-    python3 \
-    python3-pip \
-    ffmpeg \
-  && pip3 install --upgrade --no-cache-dir --timeout 300 yt-dlp \
   && apt-get clean \
-  && rm -rf /var/lib/apt/lists/* \
-  && rm -rf /tmp/* \
-  && rm -rf /var/tmp/*
-
-# Verify yt-dlp installation
-RUN yt-dlp --version \
-  && ffmpeg -version
+  && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
 WORKDIR /app
