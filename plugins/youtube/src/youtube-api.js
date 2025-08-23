@@ -84,7 +84,7 @@ class YouTubeAPI {
       throw new Error('YouTube API not configured');
     }
 
-    const { limit = 20 } = options;
+    const { limit = 20, skip = 0 } = options;
 
     try {
       console.log(`📺 Getting channel videos: ${channelId}`);
@@ -101,11 +101,12 @@ class YouTubeAPI {
 
       const uploadsPlaylistId = channelResponse.data.items[0].contentDetails.relatedPlaylists.uploads;
 
-      // Get videos from uploads playlist
+      // Get videos from uploads playlist with pagination
+      const maxResults = Math.min(limit + skip, 50);
       const playlistResponse = await this.youtube.playlistItems.list({
         part: 'snippet',
         playlistId: uploadsPlaylistId,
-        maxResults: Math.min(limit, 50)
+        maxResults: maxResults
       });
 
       if (!playlistResponse.data.items) {
@@ -136,13 +137,114 @@ class YouTubeAPI {
         return this.convertToStandardFormat(videoItem, details);
       }).filter(video => video !== null);
 
-      console.log(`✅ Channel videos retrieved: ${videos.length} videos`);
+      // Apply skip and limit
+      const paginatedVideos = videos.slice(skip, skip + limit);
+      const hasMore = videos.length > skip + limit;
 
-      return videos;
+      console.log(`✅ Channel videos retrieved: ${paginatedVideos.length} videos (${skip}-${skip + limit})`);
+
+      return {
+        videos: paginatedVideos,
+        hasMore
+      };
 
     } catch (error) {
       console.error('❌ YouTube API channel videos failed:', error);
       throw new Error(`YouTube API channel videos failed: ${error.message}`);
+    }
+  }
+
+  async resolveChannelId(channelUrl) {
+    if (!this.isConfigured()) {
+      throw new Error('YouTube API not configured');
+    }
+
+    try {
+      let channelId = channelUrl;
+
+      if (channelUrl.includes('@')) {
+        // Handle @username format
+        const username = channelUrl.split('@')[1].split('/')[0];
+        console.log(`🔍 Resolving username: ${username}`);
+        
+        // Search for channel by username
+        const searchResponse = await this.youtube.search.list({
+          part: 'snippet',
+          q: username,
+          type: 'channel',
+          maxResults: 1
+        });
+
+        if (searchResponse.data.items && searchResponse.data.items.length > 0) {
+          channelId = searchResponse.data.items[0].snippet.channelId;
+          console.log(`✅ Resolved @${username} to channel ID: ${channelId}`);
+        } else {
+          throw new Error(`Channel not found for username: ${username}`);
+        }
+      } else if (channelUrl.includes('channel/')) {
+        // Handle /channel/ID format
+        channelId = channelUrl.split('channel/')[1].split('/')[0];
+        console.log(`✅ Using channel ID directly: ${channelId}`);
+      } else if (channelUrl.includes('c/')) {
+        // Handle /c/username format
+        const username = channelUrl.split('c/')[1].split('/')[0];
+        console.log(`🔍 Resolving custom URL: ${username}`);
+        
+        // Search for channel by custom URL
+        const searchResponse = await this.youtube.search.list({
+          part: 'snippet',
+          q: username,
+          type: 'channel',
+          maxResults: 1
+        });
+
+        if (searchResponse.data.items && searchResponse.data.items.length > 0) {
+          channelId = searchResponse.data.items[0].snippet.channelId;
+          console.log(`✅ Resolved /c/${username} to channel ID: ${channelId}`);
+        } else {
+          throw new Error(`Channel not found for custom URL: ${username}`);
+        }
+      }
+
+      return channelId;
+    } catch (error) {
+      console.error('❌ Failed to resolve channel ID:', error);
+      throw new Error(`Channel ID resolution failed: ${error.message}`);
+    }
+  }
+
+  async getChannelInfo(channelId) {
+    if (!this.isConfigured()) {
+      throw new Error('YouTube API not configured');
+    }
+
+    try {
+      console.log(`📺 Getting channel info: ${channelId}`);
+
+      const response = await this.youtube.channels.list({
+        part: 'snippet,statistics,contentDetails',
+        id: channelId
+      });
+
+      if (!response.data.items || response.data.items.length === 0) {
+        throw new Error('Channel not found');
+      }
+
+      const channel = response.data.items[0];
+      return {
+        id: channel.id,
+        title: channel.snippet.title,
+        description: channel.snippet.description,
+        thumbnail: this.getBestThumbnail(channel.snippet.thumbnails),
+        subscriberCount: channel.statistics?.subscriberCount ? parseInt(channel.statistics.subscriberCount) : 0,
+        videoCount: channel.statistics?.videoCount ? parseInt(channel.statistics.videoCount) : 0,
+        viewCount: channel.statistics?.viewCount ? parseInt(channel.statistics.viewCount) : 0,
+        uploadsPlaylistId: channel.contentDetails?.relatedPlaylists?.uploads
+      };
+
+    } catch (error) {
+      console.error('❌ YouTube API channel info failed:', error);
+      throw new Error(`YouTube API channel info failed: ${error.message}`);
     }
   }
 

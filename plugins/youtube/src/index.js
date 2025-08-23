@@ -207,23 +207,6 @@ app.post('/discover', async (req, res) => {
       try {
         console.log(`📡 Fetching videos from: ${channelUrl}`);
         
-        // Extract channel ID from URL
-        let channelId = channelUrl;
-        if (channelUrl.includes('@')) {
-          // Handle @username format
-          const username = channelUrl.split('@')[1].split('/')[0];
-          // TODO: Convert username to channel ID using YouTube API
-          console.log(`ℹ️  Using username: ${username} for channel discovery`);
-        } else if (channelUrl.includes('channel/')) {
-          // Handle /channel/ID format
-          channelId = channelUrl.split('channel/')[1].split('/')[0];
-        } else if (channelUrl.includes('c/')) {
-          // Handle /c/username format
-          const username = channelUrl.split('c/')[1].split('/')[0];
-          // TODO: Convert custom URL to channel ID using YouTube API
-          console.log(`ℹ️  Using custom URL: ${username} for channel discovery`);
-        }
-        
         // Use API key from request if provided, otherwise from config
         const discoverApiKey = req.body.api_key || config.get('api_key');
         if (!discoverApiKey) {
@@ -233,13 +216,18 @@ app.post('/discover', async (req, res) => {
         // Create temporary YouTube API instance for this request
         const tempYouTubeAPI = new YouTubeAPI(discoverApiKey);
         
+        // Resolve channel ID from URL (handles @username, /channel/, /c/)
+        const channelId = await tempYouTubeAPI.resolveChannelId(channelUrl);
+        console.log(`✅ Resolved channel URL: ${channelUrl} → ${channelId}`);
+        
         // Get videos from channel using YouTube API
-        const channelVideos = await tempYouTubeAPI.getChannelVideos(channelId, {
-          limit: Math.ceil(limit / followedChannels.length)
+        const channelResult = await tempYouTubeAPI.getChannelVideos(channelId, {
+          limit: Math.ceil(limit / followedChannels.length),
+          skip: 0
         });
         
-        console.log(`✅ Found ${channelVideos.length} videos from ${channelUrl}`);
-        allVideos.push(...channelVideos);
+        console.log(`✅ Found ${channelResult.videos.length} videos from ${channelUrl}`);
+        allVideos.push(...channelResult.videos);
         
       } catch (error) {
         console.warn(`⚠️  Failed to fetch from ${channelUrl}:`, error.message);
@@ -313,28 +301,89 @@ app.post('/stream', async (req, res) => {
     
     console.log(`🎬 Getting streams for: ${videoId}`);
     
-    // Get best audio and best video streams directly from gateway
+    // Get multiple format options from gateway yt-dlp service
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/stream/${videoId}?quality=best`);
+    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
     
     if (response.ok) {
       const data = await response.json();
-      const streams = [
-        {
-          name: 'Best Video',
+      
+      // Create multiple stream options with different qualities
+      const streams = [];
+      
+      // Add best quality options
+      if (data.bestVideo) {
+        streams.push({
+          name: '🎬 Best Video Quality',
+          url: data.bestVideo,
+          quality: 'best',
+          type: 'video'
+        });
+      }
+      
+      if (data.bestAudio) {
+        streams.push({
+          name: '🎵 Best Audio Quality',
+          url: data.bestAudio,
+          quality: 'best',
+          type: 'audio'
+        });
+      }
+      
+      // Add HLS streaming if available
+      if (data.hlsUrl) {
+        streams.push({
+          name: '📡 HLS Streaming',
+          url: data.hlsUrl,
+          quality: 'adaptive',
+          type: 'hls'
+        });
+      }
+      
+      // Add specific quality options
+      if (data.formats) {
+        // Add 1080p if available
+        if (data.formats['1080p']) {
+          streams.push({
+            name: '🎬 1080p Full HD',
+            url: data.formats['1080p'],
+            quality: '1080p',
+            type: 'video'
+          });
+        }
+        
+        // Add 720p if available
+        if (data.formats['720p']) {
+          streams.push({
+            name: '📺 720p HD',
+            url: data.formats['720p'],
+            quality: '720p',
+            type: 'video'
+          });
+        }
+        
+        // Add 480p if available
+        if (data.formats['480p']) {
+          streams.push({
+            name: '📱 480p Standard',
+            url: data.formats['480p'],
+            quality: '480p',
+            type: 'video'
+          });
+        }
+      }
+      
+      // Fallback: if no specific formats, use basic best quality
+      if (streams.length === 0 && data.videoUrl) {
+        streams.push({
+          name: '🎬 Best Available',
           url: data.videoUrl,
           quality: 'best',
           type: 'video'
-        },
-        {
-          name: 'Best Audio',
-          url: data.audioUrl,
-          quality: 'best',
-          type: 'audio'
-        }
-      ];
+        });
+      }
       
-      console.log(`✅ Found ${streams.length} streams for: ${videoId}`);
+      console.log(`✅ Found ${streams.length} stream options for: ${videoId}`);
       res.json({ streams });
     } else {
       console.warn(`⚠️  Gateway error for streams: ${response.status}`);
@@ -354,6 +403,63 @@ app.post('/stream', async (req, res) => {
 // Configuration endpoints
 app.get('/config', (req, res) => {
   res.json(config.getAll());
+});
+
+// Channel catalog endpoint for Stremio
+app.get('/catalog/channel/:channelId/:extra?.json', async (req, res) => {
+  try {
+    const { channelId, extra } = req.params;
+    const { skip = 0, limit = 20 } = req.query;
+    
+    console.log(`📺 Channel catalog request: ${channelId} (skip: ${skip}, limit: ${limit})`);
+    
+    // Use API key from query if provided, otherwise from config
+    const apiKey = req.query.api_key || config.get('api_key');
+    if (!apiKey) {
+      return res.status(400).json({ error: 'YouTube API key not provided' });
+    }
+    
+    // Create temporary YouTube API instance
+    const tempYouTubeAPI = new YouTubeAPI(apiKey);
+    
+    // Get channel info
+    const channelInfo = await tempYouTubeAPI.getChannelInfo(channelId);
+    console.log(`✅ Channel info: ${channelInfo.title}`);
+    
+    // Get channel videos
+    const channelResult = await tempYouTubeAPI.getChannelVideos(channelId, { skip, limit });
+    
+    // Convert to Stremio catalog format
+    const catalog = {
+      metas: channelResult.videos.map(video => ({
+        id: video.id,
+        name: video.title,
+        description: video.description,
+        poster: video.thumbnail,
+        background: video.thumbnail,
+        type: 'movie',
+        releaseInfo: video.publishedAt,
+        runtime: video.duration,
+        youtube: {
+          channelId: video.channelId,
+          channelTitle: video.channel,
+          viewCount: video.viewCount,
+          likeCount: video.likeCount
+        }
+      })),
+      hasMore: channelResult.hasMore
+    };
+    
+    console.log(`✅ Channel catalog: ${catalog.metas.length} videos`);
+    res.json(catalog);
+    
+  } catch (error) {
+    console.error('❌ Channel catalog error:', error);
+    res.status(500).json({ 
+      error: 'Channel catalog failed', 
+      details: error.message 
+    });
+  }
 });
 
 // Integration endpoints for centralized services
