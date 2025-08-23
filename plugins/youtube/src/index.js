@@ -135,24 +135,63 @@ app.post('/search', async (req, res) => {
       }
     }
     
-    // Fallback to centralized yt-dlp search if no results or hybrid/ytdlp mode
+    // Fallback to yt-dlp search if no results or hybrid/ytdlp mode
     if (videos.length === 0 && (searchMode === 'ytdlp' || searchMode === 'hybrid')) {
-      console.log('🔄 Falling back to centralized yt-dlp search');
+      console.log('🔄 Falling back to yt-dlp search');
       
       try {
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-        const response = await fetch(`${gatewayUrl}/api/streaming/youtube/search?query=${encodeURIComponent(search)}&limit=${limit}&skip=${skip}`);
+        // Use yt-dlp directly for search (not through gateway)
+        const { spawn } = require('child_process');
+        const ytdlpArgs = [
+          '--dump-json',
+          '--extract-flat',
+          '--playlist-items', '1-20',
+          'ytsearch:' + search
+        ];
         
-        if (response.ok) {
-          const data = await response.json();
-          videos = data.videos || [];
-          hasMore = data.hasMore || false;
-          console.log(`✅ Centralized search found ${videos.length} videos`);
-        } else {
-          console.warn('⚠️  Centralized search failed:', response.status);
-        }
+        const ytdlpProcess = spawn('yt-dlp', ytdlpArgs);
+        let output = '';
+        
+        ytdlpProcess.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+        
+        ytdlpProcess.stderr.on('data', (data) => {
+          console.warn('yt-dlp stderr:', data.toString());
+        });
+        
+        await new Promise((resolve, reject) => {
+          ytdlpProcess.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`yt-dlp exited with code ${code}`));
+          });
+        });
+        
+        // Parse yt-dlp output
+        const lines = output.trim().split('\n').filter(line => line.trim());
+        const ytdlpVideos = lines.map(line => {
+          try {
+            const video = JSON.parse(line);
+            return {
+              id: video.id,
+              title: video.title,
+              thumbnail: video.thumbnail,
+              duration: video.duration,
+              publishedAt: video.upload_date,
+              viewCount: video.view_count,
+              channelTitle: video.channel
+            };
+          } catch (e) {
+            return null;
+          }
+        }).filter(v => v);
+        
+        videos = ytdlpVideos;
+        hasMore = ytdlpVideos.length >= limit;
+        console.log(`✅ yt-dlp search found ${videos.length} videos`);
+        
       } catch (error) {
-        console.warn('⚠️  Centralized search error:', error.message);
+        console.warn('⚠️  yt-dlp search error:', error.message);
       }
     }
     
@@ -195,18 +234,53 @@ app.post('/discover', async (req, res) => {
       try {
         console.log(`📡 Fetching videos from: ${channelUrl}`);
         
-        // Get channel videos using centralized streaming service
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-        const response = await fetch(`${gatewayUrl}/api/streaming/youtube/channel/${encodeURIComponent(channelUrl)}?limit=${Math.ceil(limit / followedChannels.length)}`);
+        // Get channel videos using yt-dlp directly
+        const { spawn } = require('child_process');
+        const ytdlpArgs = [
+          '--dump-json',
+          '--extract-flat',
+          '--playlist-items', `1-${Math.ceil(limit / followedChannels.length)}`,
+          channelUrl
+        ];
         
-        if (response.ok) {
-          const data = await response.json();
-          channelVideos = data.videos || [];
-          console.log(`✅ Found ${channelVideos.length} videos from ${channelUrl}`);
-        } else {
-          console.warn(`⚠️  Gateway error for ${channelUrl}: ${response.status}`);
-          channelVideos = [];
-        }
+        const ytdlpProcess = spawn('yt-dlp', ytdlpArgs);
+        let output = '';
+        
+        ytdlpProcess.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+        
+        ytdlpProcess.stderr.on('data', (data) => {
+          console.warn('yt-dlp stderr:', data.toString());
+        });
+        
+        await new Promise((resolve, reject) => {
+          ytdlpProcess.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`yt-dlp exited with code ${code}`));
+          });
+        });
+        
+        // Parse yt-dlp output
+        const lines = output.trim().split('\n').filter(line => line.trim());
+        channelVideos = lines.map(line => {
+          try {
+            const video = JSON.parse(line);
+            return {
+              id: video.id,
+              title: video.title,
+              thumbnail: video.thumbnail,
+              duration: video.duration,
+              publishedAt: video.upload_date,
+              viewCount: video.view_count,
+              channelTitle: video.channel
+            };
+          } catch (e) {
+            return null;
+          }
+        }).filter(v => v);
+        
+        console.log(`✅ Found ${channelVideos.length} videos from ${channelUrl}`);
         
         allVideos.push(...channelVideos);
         
@@ -247,19 +321,48 @@ app.post('/meta', async (req, res) => {
     
     console.log(`📝 Getting meta for: ${videoId}`);
     
-    // Get video metadata using centralized streaming service
-    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/info/${videoId}`);
+    // Get video metadata using yt-dlp directly
+    const { spawn } = require('child_process');
+    const ytdlpArgs = [
+      '--dump-json',
+      '--no-playlist',
+      `https://www.youtube.com/watch?v=${videoId}`
+    ];
     
-    if (response.ok) {
-      const data = await response.json();
-      video = data;
-      console.log(`✅ Meta retrieved for: ${video.title}`);
-      res.json({ video });
-    } else {
-      console.warn(`⚠️  Gateway error for meta: ${response.status}`);
-      res.status(404).json({ error: 'Video not found' });
-    }
+    const ytdlpProcess = spawn('yt-dlp', ytdlpArgs);
+    let output = '';
+    
+    ytdlpProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    ytdlpProcess.stderr.on('data', (data) => {
+      console.warn('yt-dlp stderr:', data.toString());
+    });
+    
+    await new Promise((resolve, reject) => {
+      ytdlpProcess.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`yt-dlp exited with code ${code}`));
+      });
+    });
+    
+    // Parse yt-dlp output
+    const videoData = JSON.parse(output.trim());
+    video = {
+      id: videoData.id,
+      title: videoData.title,
+      description: videoData.description,
+      thumbnail: videoData.thumbnail,
+      duration: videoData.duration,
+      publishedAt: videoData.upload_date,
+      viewCount: videoData.view_count,
+      channelTitle: videoData.channel,
+      tags: videoData.tags || []
+    };
+    
+    console.log(`✅ Meta retrieved for: ${video.title}`);
+    res.json({ video });
     
   } catch (error) {
     console.error('❌ Meta error:', error);
@@ -277,19 +380,46 @@ app.post('/stream', async (req, res) => {
     
     console.log(`🎬 Getting streams for: ${videoId}`);
     
-    // Get video streams using centralized streaming service
-    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
-    const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/${videoId}`);
+    // Get video streams using yt-dlp directly
+    const { spawn } = require('child_process');
+    const ytdlpArgs = [
+      '--dump-json',
+      '--no-playlist',
+      `https://www.youtube.com/watch?v=${videoId}`
+    ];
     
-    if (response.ok) {
-      const data = await response.json();
-      streams = data;
-      console.log(`✅ Found ${streams.length} streams for: ${videoId}`);
-      res.json({ streams });
-    } else {
-      console.warn(`⚠️  Gateway error for streams: ${response.status}`);
-      res.json({ streams: [] });
-    }
+    const ytdlpProcess = spawn('yt-dlp', ytdlpArgs);
+    let output = '';
+    
+    ytdlpProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    ytdlpProcess.stderr.on('data', (data) => {
+      console.warn('yt-dlp stderr:', data.toString());
+    });
+    
+    await new Promise((resolve, reject) => {
+      ytdlpProcess.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`yt-dlp exited with code ${code}`));
+      });
+    });
+    
+    // Parse yt-dlp output and extract formats
+    const videoData = JSON.parse(output.trim());
+    streams = (videoData.formats || []).map(format => ({
+      url: format.url,
+      quality: format.quality || 'unknown',
+      width: format.width,
+      height: format.height,
+      fps: format.fps,
+      filesize: format.filesize,
+      ext: format.ext
+    })).filter(format => format.url);
+    
+    console.log(`✅ Found ${streams.length} streams for: ${videoId}`);
+    res.json({ streams });
     
   } catch (error) {
     console.error('❌ Stream error:', error);
