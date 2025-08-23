@@ -327,12 +327,13 @@ app.post('/meta', async (req, res) => {
     // Redirect to GET endpoint for consistency
     const metaResponse = await fetch(`${req.protocol}://${req.get('host')}/meta/${cleanVideoId}.json`);
     
-    if (metaResponse.ok) {
-      const metaData = await metaResponse.json();
-      res.json(metaData);
-    } else {
-      res.status(404).json({ error: 'Video not found' });
-    }
+         if (metaResponse.ok) {
+       const metaData = await metaResponse.json();
+       // Gateway expects { video: ... } format
+       res.json({ video: metaData.meta });
+     } else {
+       res.status(404).json({ error: 'Video not found' });
+     }
     
   } catch (error) {
     console.error('❌ Meta POST error:', error);
@@ -391,8 +392,9 @@ app.get('/meta/:videoId.json', async (req, res) => {
         ]
       };
       
-      console.log(`✅ Meta created for: ${cleanVideoId}`);
-      res.json({ meta });
+             console.log(`✅ Meta created for: ${cleanVideoId}`);
+       // Gateway expects { video: ... } format, not { meta: ... }
+       res.json({ video: meta });
       
     } catch (error) {
       console.error(`❌ YouTube API error for ${cleanVideoId}:`, error.message);
@@ -474,15 +476,15 @@ app.post('/stream', async (req, res) => {
       console.warn(`⚠️  Gateway error for direct stream: ${response.status}`);
       // Fallback to proxy if direct stream fails
       console.log(`🔄 Falling back to proxy stream`);
-      streams.push({
+      const fallbackStreams = [{
         name: `OMG-Roma: YouTube`,
         title: `Unknown Video (Unknown Author) - Best Available`,
         url: `${gatewayUrl}/api/streaming/youtube/proxy/${cleanVideoId}?quality=best`,
         behaviorHints: {
           bingeWatch: true
         }
-      });
-      res.json({ streams });
+      }];
+      res.json({ streams: fallbackStreams });
     }
     
   } catch (error) {
