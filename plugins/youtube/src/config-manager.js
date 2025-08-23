@@ -10,7 +10,7 @@ class ConfigManager {
       search_mode: 'hybrid',
       followed_channels: [],
       video_limit: 20,
-      quality_preference: 'best',
+
       adult_content: false
     };
   }
@@ -113,12 +113,7 @@ class ConfigManager {
       this.config.search_mode = this.defaults.search_mode;
     }
 
-    // Validate quality_preference
-    const validQualities = ['best', 'worst', '720p', '1080p'];
-    if (!validQualities.includes(this.config.quality_preference)) {
-      console.warn(`⚠️  Invalid quality_preference: ${this.config.quality_preference}, using default`);
-      this.config.quality_preference = this.defaults.quality_preference;
-    }
+
 
     // Validate video_limit
     if (typeof this.config.video_limit !== 'number' || 
@@ -196,8 +191,7 @@ class ConfigManager {
       case 'search_mode':
         return ['api', 'ytdlp', 'hybrid'].includes(value);
         
-      case 'quality_preference':
-        return ['best', 'worst', '720p', '1080p'].includes(value);
+
         
       case 'video_limit':
         return typeof value === 'number' && value >= 5 && value <= 50;
@@ -264,7 +258,7 @@ class ConfigManager {
     console.log('  Search Mode:', this.config.search_mode);
     console.log('  API Key:', this.hasApiKey() ? 'Set' : 'Not set');
     console.log('  Video Limit:', this.config.video_limit);
-    console.log('  Quality Preference:', this.config.quality_preference);
+
     console.log('  Adult Content:', this.config.adult_content);
     console.log('  Followed Channels:', this.config.followed_channels.length);
   }

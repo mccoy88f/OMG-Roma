@@ -234,12 +234,15 @@ class YouTubeAPI {
       return {
         id: channel.id,
         title: channel.snippet.title,
-        description: channel.snippet.description,
+        description: channel.snippet.description || '',
         thumbnail: this.getBestThumbnail(channel.snippet.thumbnails),
         subscriberCount: channel.statistics?.subscriberCount ? parseInt(channel.statistics.subscriberCount) : 0,
         videoCount: channel.statistics?.videoCount ? parseInt(channel.statistics.videoCount) : 0,
         viewCount: channel.statistics?.viewCount ? parseInt(channel.statistics.viewCount) : 0,
-        uploadsPlaylistId: channel.contentDetails?.relatedPlaylists?.uploads
+        uploadsPlaylistId: channel.contentDetails?.relatedPlaylists?.uploads || '',
+        publishedAt: channel.snippet.publishedAt,
+        country: channel.snippet.country || '',
+        language: channel.snippet.defaultLanguage || 'en'
       };
 
     } catch (error) {
@@ -343,6 +346,63 @@ class YouTubeAPI {
     
     return adultKeywords.some(keyword => content.includes(keyword));
   }
+
+  async getVideoInfo(videoId) {
+    if (!this.isConfigured()) {
+      throw new Error('YouTube API not configured');
+    }
+
+    try {
+      console.log(`📹 Getting video info for: ${videoId}`);
+
+      // Get video details
+      const response = await this.youtube.videos.list({
+        part: 'snippet,contentDetails,statistics,status',
+        id: videoId
+      });
+
+      if (!response.data.items || response.data.items.length === 0) {
+        throw new Error('Video not found');
+      }
+
+      const item = response.data.items[0];
+      const details = item;
+
+      // Skip private or deleted videos
+      if (details?.status?.privacyStatus === 'private') {
+        throw new Error('Video is private or unavailable');
+      }
+
+      // Convert to standardized format
+      const video = {
+        id: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description || '',
+        thumbnail: this.getBestThumbnail(item.snippet.thumbnails),
+        url: `https://www.youtube.com/watch?v=${item.id}`,
+        channel: item.snippet.channelTitle,
+        channelId: item.snippet.channelId,
+        publishedAt: item.snippet.publishedAt,
+        viewCount: details?.statistics?.viewCount ? parseInt(details.statistics.viewCount) : 0,
+        likeCount: details?.statistics?.likeCount ? parseInt(details.statistics.likeCount) : 0,
+        duration: details?.contentDetails?.duration ? this.parseISO8601Duration(details.contentDetails.duration) : '',
+        tags: item.snippet.tags || [],
+        adult: this.detectAdultContent(item)
+      };
+
+      // Calculate rating
+      video.rating = this.calculateRating(video);
+
+      console.log(`✅ Video info retrieved: ${video.title}`);
+      return video;
+
+    } catch (error) {
+      console.error('❌ Failed to get video info:', error);
+      throw new Error(`Failed to get video info: ${error.message}`);
+    }
+  }
+
+
 
   async getQuotaUsage() {
     // This would require additional API calls to get quota usage

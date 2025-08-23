@@ -96,33 +96,75 @@ class StreamingManager {
     }
   }
 
-  // Normalizza formati per plugin specifico
+  // Normalizza formati per plugin specifico con bestvideo+bestaudio
   normalizeFormatsForPlugin(pluginId, ytdlpFormats, videoId) {
     const formats = [];
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
     
     for (const format of ytdlpFormats) {
-      if (format.url && format.ext) {
-        // Crea URL proxy per il plugin
-        const proxyUrl = `/api/streaming/${pluginId}/proxy/${videoId}?format=${format.ext}&quality=${format.height}p`;
-        
-        formats.push({
-          url: proxyUrl,
-          ext: format.ext,
-          quality: format.height + 'p',
-          width: format.width || 0,
-          height: format.height || 0,
-          fps: format.fps || 0,
-          filesize: format.filesize || 0,
-          vcodec: format.vcodec || 'none',
-          acodec: format.acodec || 'none',
-          label: `${format.height}p${format.fps > 30 ? ' ' + format.fps + 'fps' : ''}`,
-          type: 'proxy'
-        });
+      if (format.url) {
+        // Per formati ottimali (bestvideo+bestaudio), usa URL diretti quando possibile
+        if (format.type === 'combined') {
+          formats.push({
+            url: format.url,
+            ext: format.ext,
+            quality: format.quality,
+            width: format.width || 0,
+            height: format.height || 0,
+            fps: format.fps || 0,
+            filesize: format.filesize || 0,
+            vcodec: format.vcodec || 'none',
+            acodec: format.acodec || 'none',
+            label: format.label,
+            type: 'direct'
+          });
+        } else if (format.type === 'video' || format.type === 'audio') {
+          // Per formati separati (bestvideo o bestaudio), usa anche URL diretti
+          formats.push({
+            url: format.url,
+            ext: format.ext,
+            quality: format.quality,
+            width: format.width || 0,
+            height: format.height || 0,
+            fps: format.fps || 0,
+            filesize: format.filesize || 0,
+            vcodec: format.vcodec || 'none',
+            acodec: format.acodec || 'none',
+            label: format.label,
+            type: format.type
+          });
+        } else {
+          // Fallback: crea URL proxy per formati legacy
+          const proxyUrl = `${gatewayUrl}/api/streaming/${pluginId}/proxy/${videoId}?format=${format.ext}&quality=${format.height}p`;
+          
+          formats.push({
+            url: proxyUrl,
+            ext: format.ext,
+            quality: format.height + 'p',
+            width: format.width || 0,
+            height: format.height || 0,
+            fps: format.fps || 0,
+            filesize: format.filesize || 0,
+            vcodec: format.vcodec || 'none',
+            acodec: format.acodec || 'none',
+            label: `${format.height}p${format.fps > 30 ? ' ' + format.fps + 'fps' : ''}`,
+            type: 'proxy'
+          });
+        }
       }
     }
     
-    // Ordina per qualità (migliore prima)
+    // Ordina: combinati prima, poi video, poi audio, poi proxy
     formats.sort((a, b) => {
+      const typeOrder = { 'combined': 0, 'video': 1, 'audio': 2, 'proxy': 3 };
+      const typeA = typeOrder[a.type] || 3;
+      const typeB = typeOrder[b.type] || 3;
+      
+      if (typeA !== typeB) {
+        return typeA - typeB;
+      }
+      
+      // Per lo stesso tipo, ordina per qualità
       const heightA = parseInt(a.height) || 0;
       const heightB = parseInt(b.height) || 0;
       return heightB - heightA;

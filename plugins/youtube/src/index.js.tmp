@@ -353,51 +353,75 @@ app.post('/stream', async (req, res) => {
       // Create multiple stream options with different qualities
       const streams = [];
       
-      // Handle formats returned by gateway (bestvideo+bestaudio)
-      if (data && Array.isArray(data)) {
-        // Gateway returns array of format objects with bestvideo+bestaudio
-        data.forEach(format => {
-          if (format.url) {
-            // Create descriptive names based on format type
-            let name = format.label || 'Unknown Format';
-            
-            // Add quality indicators
-            if (format.height) {
-              name = `${name} (${format.height}p)`;
-            }
-            
-            // Add type indicators
-            if (format.type === 'combined') {
-              name = `🎬 ${name} - Best Quality`;
-            } else if (format.type === 'video') {
-              name = `🎬 ${name} - Video Only`;
-            } else if (format.type === 'audio') {
-              name = `🎵 ${name} - Audio Only`;
-            } else {
-              name = `📺 ${name}`;
-            }
-            
-            streams.push({
-              name: name,
-              url: format.url,
-              quality: format.quality || 'unknown',
-              type: format.type || 'video',
-              height: format.height || 0,
-              width: format.width || 0,
-              ext: format.ext || 'mp4'
-            });
-          }
+      // Add best quality options
+      if (data.bestVideo) {
+        streams.push({
+          name: '🎬 Best Video Quality',
+          url: data.bestVideo,
+          quality: 'best',
+          type: 'video'
         });
       }
       
-      // Fallback: if no formats found, create proxy stream
-      if (streams.length === 0) {
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
+      if (data.bestAudio) {
         streams.push({
-          name: '🎬 Best Available (Proxy)',
-          url: `${gatewayUrl}/api/streaming/youtube/proxy/${videoId}?quality=best`,
+          name: '🎵 Best Audio Quality',
+          url: data.bestAudio,
           quality: 'best',
-          type: 'proxy'
+          type: 'audio'
+        });
+      }
+      
+      // Add HLS streaming if available
+      if (data.hlsUrl) {
+        streams.push({
+          name: '📡 HLS Streaming',
+          url: data.hlsUrl,
+          quality: 'adaptive',
+          type: 'hls'
+        });
+      }
+      
+      // Add specific quality options
+      if (data.formats) {
+        // Add 1080p if available
+        if (data.formats['1080p']) {
+          streams.push({
+            name: '🎬 1080p Full HD',
+            url: data.formats['1080p'],
+            quality: '1080p',
+            type: 'video'
+          });
+        }
+        
+        // Add 720p if available
+        if (data.formats['720p']) {
+          streams.push({
+            name: '📺 720p HD',
+            url: data.formats['720p'],
+            quality: '720p',
+            type: 'video'
+          });
+        }
+        
+        // Add 480p if available
+        if (data.formats['480p']) {
+          streams.push({
+            name: '📱 480p Standard',
+            url: data.formats['480p'],
+            quality: '480p',
+            type: 'video'
+          });
+        }
+      }
+      
+      // Fallback: if no specific formats, use basic best quality
+      if (streams.length === 0 && data.videoUrl) {
+        streams.push({
+          name: '🎬 Best Available',
+          url: data.videoUrl,
+          quality: 'best',
+          type: 'video'
         });
       }
       
@@ -558,43 +582,19 @@ app.post('/test', async (req, res) => {
           // Test streaming endpoint (requires gateway)
           const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3100';
           try {
-            console.log('🎬 Testing streaming with gateway (bestvideo+bestaudio)...');
             const response = await fetch(`${gatewayUrl}/api/streaming/youtube/formats/dQw4w9WgXcQ`);
             
             if (response.ok) {
               const streamData = await response.json();
-              
-              // Analyze the returned formats for bestvideo+bestaudio
-              const formatAnalysis = {
-                total: Array.isArray(streamData) ? streamData.length : 0,
-                combined: 0,
-                video: 0,
-                audio: 0,
-                proxy: 0,
-                direct: 0
-              };
-              
-              if (Array.isArray(streamData)) {
-                streamData.forEach(format => {
-                  if (format.type === 'combined') formatAnalysis.combined++;
-                  else if (format.type === 'video') formatAnalysis.video++;
-                  else if (format.type === 'audio') formatAnalysis.audio++;
-                  else if (format.type === 'proxy') formatAnalysis.proxy++;
-                  else if (format.type === 'direct') formatAnalysis.direct++;
-                });
-              }
-              
               testResult = {
                 success: true,
                 testType: 'stream',
                 duration: `${Date.now() - startTime}ms`,
                 result: {
                   videoId: 'dQw4w9WgXcQ',
-                  streamFormats: streamData,
-                  formatAnalysis: formatAnalysis,
-                  hasStreams: formatAnalysis.total > 0,
-                  bestvideo_bestaudio: formatAnalysis.combined > 0 || (formatAnalysis.video > 0 && formatAnalysis.audio > 0),
-                  sampleStream: streamData[0] || null
+                  streamFormats: Object.keys(streamData),
+                  hasStreams: Object.keys(streamData).length > 0,
+                  sampleStream: streamData.bestVideo || streamData.videoUrl
                 }
               };
             } else {

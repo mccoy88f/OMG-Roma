@@ -218,7 +218,7 @@ class YtdlpService {
     }
   }
 
-  // Ottieni formati disponibili
+  // Ottieni formati disponibili con bestvideo+bestaudio
   async getVideoFormats(videoId) {
     const cacheKey = this.generateCacheKey('formats', { videoId });
     const cached = this.getFromCache(cacheKey);
@@ -228,18 +228,20 @@ class YtdlpService {
     }
 
     try {
-      console.log(`🎬 yt-dlp formats per: ${videoId}`);
+      console.log(`🎬 yt-dlp formats per: ${videoId} (bestvideo+bestaudio)`);
       
       const args = [
         '--dump-json',
         '--no-playlist',
+        '-f', 'bestvideo+bestaudio/best',
         videoId
       ];
 
       const output = await this.runYtdlp(args, { timeout: 30000 });
       const videoInfo = JSON.parse(output);
       
-      const formats = this.extractFormats(videoInfo);
+      // Estrai sia il formato migliore combinato che i formati separati
+      const formats = this.extractOptimalFormats(videoInfo);
       
       // Salva in cache
       this.setCache(cacheKey, formats);
@@ -249,6 +251,57 @@ class YtdlpService {
     } catch (error) {
       console.error('❌ Errore formats video yt-dlp:', error);
       throw new Error(`Impossibile ottenere formats: ${error.message}`);
+    }
+  }
+
+  // Ottieni URL streaming diretti per bestvideo+bestaudio
+  async getBestStreamUrls(videoId) {
+    const cacheKey = this.generateCacheKey('stream_urls', { videoId });
+    const cached = this.getFromCache(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      console.log(`🔗 yt-dlp stream URLs per: ${videoId} (bestvideo+bestaudio)`);
+      
+      // Ottieni URL per bestvideo
+      const videoArgs = [
+        '--get-url',
+        '--no-playlist',
+        '-f', 'bestvideo',
+        videoId
+      ];
+
+      // Ottieni URL per bestaudio  
+      const audioArgs = [
+        '--get-url',
+        '--no-playlist',
+        '-f', 'bestaudio',
+        videoId
+      ];
+
+      const [videoUrl, audioUrl] = await Promise.all([
+        this.runYtdlp(videoArgs, { timeout: 30000 }),
+        this.runYtdlp(audioArgs, { timeout: 30000 })
+      ]);
+
+      const streamUrls = {
+        bestVideo: videoUrl.trim(),
+        bestAudio: audioUrl.trim(),
+        combined: null // Sarà gestito dal proxy se necessario
+      };
+
+      // Salva in cache
+      this.setCache(cacheKey, streamUrls);
+      
+      console.log(`✅ Stream URLs ottenuti per: ${videoId}`);
+      return streamUrls;
+      
+    } catch (error) {
+      console.error('❌ Errore stream URLs yt-dlp:', error);
+      throw new Error(`Impossibile ottenere stream URLs: ${error.message}`);
     }
   }
 
@@ -374,6 +427,63 @@ class YtdlpService {
       const qualityB = this.getQualityScore(b);
       return qualityB - qualityA;
     });
+    
+    return formats;
+  }
+
+  // Estrai formati ottimali con bestvideo+bestaudio
+  extractOptimalFormats(videoInfo) {
+    const formats = [];
+    
+    // Se il video ha format_id, significa che è il risultato di bestvideo+bestaudio
+    if (videoInfo.format_id && videoInfo.url) {
+      formats.push({
+        url: videoInfo.url,
+        ext: videoInfo.ext || 'mp4',
+        quality: 'best',
+        width: videoInfo.width || 0,
+        height: videoInfo.height || 0,
+        fps: videoInfo.fps || 30,
+        filesize: videoInfo.filesize || 0,
+        vcodec: videoInfo.vcodec || 'unknown',
+        acodec: videoInfo.acodec || 'unknown',
+        format_id: videoInfo.format_id,
+        label: `🎬 Best Quality (${videoInfo.height || 'Unknown'}p)`,
+        type: 'combined'
+      });
+    }
+    
+    // Se abbiamo requested_formats, sono i formati separati di bestvideo+bestaudio
+    if (videoInfo.requested_formats && Array.isArray(videoInfo.requested_formats)) {
+      videoInfo.requested_formats.forEach((format, index) => {
+        if (format.url) {
+          const isVideo = format.vcodec && format.vcodec !== 'none';
+          const isAudio = format.acodec && format.acodec !== 'none';
+          
+          formats.push({
+            url: format.url,
+            ext: format.ext || 'mp4',
+            quality: isVideo ? `${format.height}p` : 'audio',
+            width: format.width || 0,
+            height: format.height || 0,
+            fps: format.fps || 0,
+            filesize: format.filesize || 0,
+            vcodec: format.vcodec || 'none',
+            acodec: format.acodec || 'none',
+            format_id: format.format_id,
+            label: isVideo ? 
+              `🎬 Best Video (${format.height || 'Unknown'}p)` :
+              `🎵 Best Audio`,
+            type: isVideo ? 'video' : 'audio'
+          });
+        }
+      });
+    }
+    
+    // Fallback: se non abbiamo formati, usa il metodo standard
+    if (formats.length === 0) {
+      return this.extractFormats(videoInfo);
+    }
     
     return formats;
   }
