@@ -1,7 +1,7 @@
-FROM node:20-bookworm-slim
+FROM node:20-bullseye-slim
 
-# Install system dependencies
-RUN apt-get update \
+# Install system dependencies with better error handling and retry
+RUN apt-get update --fix-missing \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -10,8 +10,17 @@ RUN apt-get update \
     python3 \
     python3-pip \
     ffmpeg \
-  && pip3 install --upgrade yt-dlp \
-  && rm -rf /var/lib/apt/lists/*
+  && pip3 install --upgrade --no-cache-dir --timeout 300 yt-dlp \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /tmp/* \
+  && rm -rf /var/tmp/*
+
+# Verify installations
+RUN python3 --version \
+  && pip3 --version \
+  && yt-dlp --version \
+  && ffmpeg -version
 
 # Create app directory
 WORKDIR /app
