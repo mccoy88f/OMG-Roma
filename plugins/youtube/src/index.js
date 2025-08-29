@@ -850,7 +850,7 @@ app.get('/catalog/channels/YouTube/:extra?.json', async (req, res) => {
         // Convert to Stremio catalog format
         const catalog = {
           metas: allVideos.map(video => ({
-            id: video.id,
+            id: `youtube:${video.id}`,
             name: video.title,
             description: video.description,
             poster: video.thumbnail,
@@ -913,7 +913,7 @@ app.get('/catalog/channels/YouTube/:extra?.json', async (req, res) => {
         // Convert to Stremio catalog format
         const catalog = {
           metas: paginatedVideos.map(video => ({
-            id: video.id,
+            id: `youtube:${video.id}`,
             name: video.title,
             description: video.description,
             poster: video.thumbnail,
@@ -954,9 +954,82 @@ app.get('/catalog/channels/YouTube/:extra?.json', async (req, res) => {
   }
 });
 
-// Search catalog endpoint for Stremio - REMOVED from Scopri
-// This endpoint was creating an empty "Ricerca YouTube" entry in Stremio
-// Search functionality is still available via /search endpoint and other methods
+// Search catalog endpoint for Stremio
+app.post('/search', async (req, res) => {
+  try {
+    const { search, skip = 0, limit = 20 } = req.body;
+    
+    if (!search || search.trim() === '') {
+      return res.json({ 
+        videos: [], 
+        hasMore: false,
+        message: 'Search query required'
+      });
+    }
+    
+    console.log(`🔍 Search request: "${search}" (skip: ${skip}, limit: ${limit})`);
+    
+    // Get API key from request or config
+    const apiKey = req.body.api_key || req.body.youtube_api_key || config.get('api_key');
+    if (!apiKey) {
+      return res.status(400).json({ 
+        error: 'YouTube API key required',
+        videos: [],
+        hasMore: false
+      });
+    }
+    
+    // Create temporary YouTube API instance
+    const tempYouTubeAPI = new YouTubeAPI(apiKey);
+    
+    try {
+      // Search videos using YouTube API
+      const searchResults = await tempYouTubeAPI.searchVideos(search, {
+        maxResults: limit,
+        skip: skip
+      });
+      
+      if (!searchResults || !searchResults.videos) {
+        console.log(`⚠️  No search results for: "${search}"`);
+        return res.json({ 
+          videos: [], 
+          hasMore: false 
+        });
+      }
+      
+      // Convert to Stremio format with correct IDs
+      const videos = searchResults.videos.map(video => ({
+        ...video,
+        id: `youtube:${video.id}` // Ensure correct ID format
+      }));
+      
+      console.log(`✅ Search completed: ${videos.length} videos found for "${search}"`);
+      res.json({ 
+        videos, 
+        hasMore: searchResults.hasMore || false,
+        query: search
+      });
+      
+    } catch (apiError) {
+      console.error(`❌ YouTube API search error:`, apiError.message);
+      
+      // Return empty results on API error
+      res.json({ 
+        videos: [], 
+        hasMore: false,
+        error: 'Search failed'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Search endpoint error:', error.message);
+    res.status(500).json({ 
+      error: 'Search request failed',
+      videos: [],
+      hasMore: false
+    });
+  }
+});
 
 // Integration endpoints for centralized services
 app.get('/streaming/search', async (req, res) => {

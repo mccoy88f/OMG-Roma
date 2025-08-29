@@ -145,11 +145,7 @@ class PluginManager {
       const registry = await this.loadPluginRegistry();
       
       for (const [pluginId, pluginInfo] of Object.entries(registry.plugins || {})) {
-        if (!pluginInfo.enabled) {
-          console.log(`⏸️  Plugin ${pluginId} is disabled, skipping`);
-          continue;
-        }
-        
+        console.log(`🔍 Processing plugin: ${pluginId}`);
         await this.loadPluginFromRegistry(pluginId, pluginInfo);
       }
       
@@ -172,8 +168,24 @@ class PluginManager {
       console.log(`📦 Loading plugin from registry: ${pluginId}`);
       console.log(`🔗 Plugin info:`, pluginInfo);
       
-      // Get plugin config from the plugin container directly
-      const baseUrl = `http://omg-${pluginId}-plugin:${pluginInfo.port}`;
+      // Use plugin config from registry if available
+      if (pluginInfo.config) {
+        console.log(`✅ Using plugin config from registry for ${pluginId}`);
+        const plugin = {
+          id: pluginId,
+          url: pluginInfo.url || `http://${pluginId}-plugin:${pluginInfo.port}`,
+          config: pluginInfo.config,
+          manifestEnabled: pluginInfo.manifestEnabled !== false,
+          status: 'registered'
+        };
+        
+        this.plugins.set(pluginId, plugin);
+        console.log(`✅ Plugin ${pluginId} loaded from registry`);
+        return true;
+      }
+      
+      // Fallback: try to get plugin config from container
+      const baseUrl = pluginInfo.url || `http://${pluginId}-plugin:${pluginInfo.port}`;
       console.log(`🌐 Trying to connect to: ${baseUrl}`);
       
       // Try to get plugin.json from the container via HTTP with retry
@@ -197,8 +209,8 @@ class PluginManager {
             console.log(`⚠️  Could not fetch plugin.json via HTTP after ${maxRetries} attempts, using registry info`);
             pluginConfig = {
               id: pluginId,
-              name: pluginId.charAt(0).toUpperCase() + pluginId.slice(1),
-              version: "1.0.0",
+              name: pluginInfo.name || pluginId.charAt(0).toUpperCase() + pluginId.slice(1),
+              version: pluginInfo.version || "1.0.0",
               port: pluginInfo.port,
               endpoints: {
                 search: "/search",
@@ -208,17 +220,15 @@ class PluginManager {
                 config: "/config"
               },
               stremio: {
-                search_catalog_name: `Ricerca ${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)}`,
+                search_catalog_name: `Search ${pluginId}`,
                 search_catalog_id: `${pluginId}_search`,
-                discover_catalog_name: `${pluginId.charAt(0).toUpperCase() + pluginId.slice(1)} Discover`,
-                discover_catalog_id: `${pluginId}_discover`
+                discover_catalog_name: `${pluginId} Discover`,
+                discover_catalog_id: `${pluginId}_channels`
               }
             };
           } else {
             // Wait before retry
-            const waitTime = retryCount * 2000; // 2s, 4s, 6s
-            console.log(`⏳ Waiting ${waitTime/1000}s before retry...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
       }
@@ -231,23 +241,42 @@ class PluginManager {
         return false;
       }
       
-      // Register plugin
-      const plugin = {
+      // Add plugin to registry
+      this.plugins.set(pluginId, {
         id: pluginId,
+        url: baseUrl,
         config: pluginConfig,
-        baseUrl: baseUrl,
-        status: 'discovered',
-        lastHealthCheck: null,
-        manifestEnabled: true // Default: plugin is enabled in manifest
-      };
+        manifestEnabled: pluginInfo.manifestEnabled !== false,
+        status: 'loaded'
+      });
       
-      this.plugins.set(pluginId, plugin);
-      console.log(`✅ Loaded plugin: ${pluginConfig.name} (${pluginId})`);
-      
+      console.log(`✅ Plugin ${pluginId} loaded successfully`);
       return true;
       
     } catch (error) {
       console.error(`❌ Error loading plugin ${pluginId}:`, error.message);
+      
+      // Add plugin with error status
+      this.plugins.set(pluginId, {
+        id: pluginId,
+        url: pluginInfo.url || `http://${pluginId}-plugin:${pluginInfo.port}`,
+        config: {
+          id: pluginId,
+          name: pluginId,
+          version: '1.0.0',
+          description: `Plugin ${pluginId} (error loading)`,
+          stremio: {
+            search_catalog_name: `Search ${pluginId}`,
+            search_catalog_id: `${pluginId}_search`,
+            discover_catalog_name: `${pluginId} Discover`,
+            discover_catalog_id: `${pluginId}_channels`
+          }
+        },
+        manifestEnabled: false,
+        status: 'error',
+        error: error.message
+      });
+      
       return false;
     }
   }
@@ -352,8 +381,9 @@ class PluginManager {
     }
     
     try {
-      console.log(`🔍 Health check for ${pluginId} at ${plugin.baseUrl}/health`);
-      const response = await axios.get(`${plugin.baseUrl}/health`, {
+      const baseUrl = plugin.url || plugin.baseUrl;
+      console.log(`🔍 Health check for ${pluginId} at ${baseUrl}/health`);
+      const response = await axios.get(`${baseUrl}/health`, {
         timeout: 10000
       });
       
@@ -387,13 +417,21 @@ class PluginManager {
       throw new Error(`Plugin ${pluginId} not found`);
     }
     
-    if (plugin.status !== 'healthy') {
-      throw new Error(`Plugin ${pluginId} is not healthy`);
+    // Allow calls to plugins in various states (not just healthy)
+    if (plugin.status === 'error') {
+      throw new Error(`Plugin ${pluginId} has errors: ${plugin.error}`);
     }
     
     try {
-      const url = `${plugin.baseUrl}${plugin.config.endpoints[endpoint]}`;
-      console.log(`🔗 Calling plugin: ${pluginId} -> ${endpoint}`);
+      const baseUrl = plugin.url || plugin.baseUrl;
+      const endpointPath = plugin.config.endpoints[endpoint];
+      
+      if (!endpointPath) {
+        throw new Error(`Endpoint ${endpoint} not found in plugin ${pluginId}`);
+      }
+      
+      const url = `${baseUrl}${endpointPath}`;
+      console.log(`🔗 Calling plugin: ${pluginId} -> ${endpoint} at ${url}`);
       
       const response = await axios.post(url, params, {
         timeout: 30000,
@@ -431,8 +469,13 @@ class PluginManager {
       status[pluginId] = {
         name: plugin.config.name,
         status: plugin.status,
-        lastHealthCheck: plugin.lastHealthCheck
+        url: plugin.url || plugin.baseUrl,
+        manifestEnabled: plugin.manifestEnabled
       };
+      
+      if (plugin.error) {
+        status[pluginId].error = plugin.error;
+      }
     }
     return status;
   }

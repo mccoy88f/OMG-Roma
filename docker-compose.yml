@@ -28,7 +28,7 @@ services:
     build: 
       context: .
       dockerfile: plugins/youtube/Dockerfile
-    container_name: omg-youtube-plugin
+    container_name: youtube-plugin
     ports:
       - "3001:3001"
     environment:

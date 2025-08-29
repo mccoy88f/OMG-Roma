@@ -96,6 +96,52 @@ class StreamingManager {
     }
   }
 
+  // Ottieni informazioni stream per plugin (per integrazione con endpoint API)
+  async getStreamInfo(pluginId, videoId, format = 'bestvideo+bestaudio') {
+    try {
+      console.log(`🎬 StreamingManager: stream info per plugin ${pluginId}: ${videoId} con formato ${format}`);
+      
+      // Ottieni info video base
+      const videoInfo = await this.ytdlpService.getVideoInfo(videoId);
+      
+      if (!videoInfo) {
+        console.warn(`⚠️  Video info non trovato per: ${videoId}`);
+        return null;
+      }
+      
+      // Genera URL stream diretto usando yt-dlp
+      const streamUrl = await this.ytdlpService.getDirectStreamUrl(videoId, format);
+      
+      if (streamUrl) {
+        return {
+          url: streamUrl,
+          title: videoInfo.title || 'Unknown Video',
+          channel: videoInfo.channel || videoInfo.uploader || 'Unknown Channel',
+          quality: format,
+          format: 'mp4',
+          duration: videoInfo.duration,
+          thumbnail: videoInfo.thumbnail
+        };
+      } else {
+        // Fallback: genera URL proxy
+        const proxyUrl = `http://localhost:3100/proxy-best/channel/${pluginId}:${videoId}`;
+        return {
+          url: proxyUrl,
+          title: videoInfo.title || 'Unknown Video',
+          channel: videoInfo.channel || videoInfo.uploader || 'Unknown Channel',
+          quality: 'Best Available',
+          format: 'mp4',
+          duration: videoInfo.duration,
+          thumbnail: videoInfo.thumbnail
+        };
+      }
+      
+    } catch (error) {
+      console.error(`❌ Errore stream info per plugin ${pluginId}:`, error);
+      return null;
+    }
+  }
+
   // Normalizza formati per plugin specifico con bestvideo+bestaudio
   normalizeFormatsForPlugin(pluginId, ytdlpFormats, videoId) {
     const formats = [];

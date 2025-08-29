@@ -98,6 +98,58 @@ class YtdlpService {
     return `${operation}_${JSON.stringify(params)}`;
   }
 
+  // Ottieni URL stream diretto per formato specifico
+  async getDirectStreamUrl(videoId, format = 'bestvideo+bestaudio') {
+    try {
+      console.log(`🎬 YtdlpService: ottenendo URL stream diretto per ${videoId} con formato ${format}`);
+      
+      // Genera chiave cache
+      const cacheKey = this.generateCacheKey('direct_stream', { videoId, format });
+      
+      // Controlla cache
+      if (this.cache.has(cacheKey)) {
+        const cached = this.cache.get(cacheKey);
+        if (Date.now() - cached.timestamp < this.cacheTimeout) {
+          console.log(`✅ URL stream dalla cache per ${videoId}`);
+          return cached.data;
+        }
+      }
+      
+      // Costruisci URL YouTube
+      const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      
+      // Ottieni URL stream diretto
+      const args = [
+        '--get-url',
+        '--format', format,
+        '--no-playlist',
+        youtubeUrl
+      ];
+      
+      const streamUrl = await this.runYtdlp(args, { timeout: 15000 });
+      
+      if (streamUrl && streamUrl.trim()) {
+        const url = streamUrl.trim();
+        console.log(`✅ URL stream diretto ottenuto per ${videoId}: ${url.substring(0, 100)}...`);
+        
+        // Salva in cache
+        this.cache.set(cacheKey, {
+          data: url,
+          timestamp: Date.now()
+        });
+        
+        return url;
+      } else {
+        console.warn(`⚠️  Nessun URL stream trovato per ${videoId} con formato ${format}`);
+        return null;
+      }
+      
+    } catch (error) {
+      console.error(`❌ Errore ottenimento URL stream diretto per ${videoId}:`, error);
+      return null;
+    }
+  }
+
   getFromCache(key) {
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {

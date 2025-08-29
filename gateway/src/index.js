@@ -192,6 +192,144 @@ app.get('/stream/:type/:id.json', async (req, res) => {
   }
 });
 
+// Direct proxy endpoints for streaming (based on oldv working version)
+app.get('/proxy/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    
+    // Extract plugin ID and video ID from the combined ID
+    const [pluginId, videoId] = id.split(':', 2);
+    
+    if (!pluginId || !videoId) {
+      console.error(`❌ Invalid video ID format: ${id}`);
+      return res.status(400).send('Invalid video ID format');
+    }
+    
+    console.log(`🎬 Direct proxy request for ${pluginId}:${videoId}`);
+    
+    // Use streaming manager to handle the proxy
+    await streamingManager.streamVideo(pluginId, videoId, null, 'best', req, res);
+    
+  } catch (error) {
+    console.error('❌ Direct proxy error:', error);
+    res.status(500).send('Streaming error');
+  }
+});
+
+app.get('/proxy-best/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    
+    // Extract plugin ID and video ID from the combined ID
+    const [pluginId, videoId] = id.split(':', 2);
+    
+    if (!pluginId || !videoId) {
+      console.error(`❌ Invalid video ID format: ${id}`);
+      return res.status(400).send('Invalid video ID format');
+    }
+    
+    console.log(`🎯 Best quality proxy request for ${pluginId}:${videoId}`);
+    
+    // Use streaming manager with best quality
+    await streamingManager.streamVideo(pluginId, videoId, null, 'bestvideo+bestaudio', req, res);
+    
+  } catch (error) {
+    console.error('❌ Best quality proxy error:', error);
+    res.status(500).send('Streaming error');
+  }
+});
+
+app.get('/proxy-720/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    
+    // Extract plugin ID and video ID from the combined ID
+    const [pluginId, videoId] = id.split(':', 2);
+    
+    if (!pluginId || !videoId) {
+      console.error(`❌ Invalid video ID format: ${id}`);
+      return res.status(400).send('Invalid video ID format');
+    }
+    
+    console.log(`📺 720p proxy request for ${pluginId}:${videoId}`);
+    
+    // Use streaming manager with 720p quality
+    await streamingManager.streamVideo(pluginId, videoId, null, 'bv*[height<=720]+ba/b[height<=720]', req, res);
+    
+  } catch (error) {
+    console.error('❌ 720p proxy error:', error);
+    res.status(500).send('Streaming error');
+  }
+});
+
+app.get('/proxy-360/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    
+    // Extract plugin ID and video ID from the combined ID
+    const [pluginId, videoId] = id.split(':', 2);
+    
+    if (!pluginId || !videoId) {
+      console.error(`❌ Invalid video ID format: ${id}`);
+      return res.status(400).send('Invalid video ID format');
+    }
+    
+    console.log(`📱 360p proxy request for ${pluginId}:${videoId}`);
+    
+    // Use streaming manager with 360p quality
+    await streamingManager.streamVideo(pluginId, videoId, null, 'bv*[height<=360]+ba/b[height<=360]', req, res);
+    
+  } catch (error) {
+    console.error('❌ 360p proxy error:', error);
+    res.status(500).send('Streaming error');
+  }
+});
+
+// YouTube streaming endpoints (for plugin integration)
+app.get('/api/streaming/youtube/stream/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { format = 'bestvideo+bestaudio' } = req.query;
+    
+    console.log(`🎬 YouTube stream request for: ${videoId} with format: ${format}`);
+    
+    // Use streaming manager to get stream info
+    const streamInfo = await streamingManager.getStreamInfo('youtube', videoId, format);
+    
+    if (streamInfo && streamInfo.url) {
+      res.json({
+        url: streamInfo.url,
+        title: streamInfo.title || 'Unknown Video',
+        channel: streamInfo.channel || 'Unknown Channel',
+        quality: streamInfo.quality || 'Best Available',
+        format: streamInfo.format || 'mp4'
+      });
+    } else {
+      // Fallback: generate proxy URL
+      const proxyUrl = `${req.protocol}://${req.get('host')}/proxy-best/channel/youtube:${videoId}`;
+      res.json({
+        url: proxyUrl,
+        title: 'Unknown Video',
+        channel: 'Unknown Channel',
+        quality: 'Best Available',
+        format: 'mp4'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ YouTube stream error:', error);
+    // Fallback: generate proxy URL
+    const proxyUrl = `${req.protocol}://${req.get('host')}/proxy-best/channel/youtube:${videoId}`;
+    res.json({
+      url: proxyUrl,
+      title: 'Unknown Video',
+      channel: 'Unknown Channel',
+      quality: 'Best Available',
+      format: 'mp4'
+    });
+  }
+});
+
 // Streaming API endpoints
 app.get('/api/streaming/:pluginId/search', async (req, res) => {
   try {

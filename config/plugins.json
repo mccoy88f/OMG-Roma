@@ -1,10 +1,129 @@
 {
   "plugins": {
     "youtube": {
-      "enabled": true,
-      "container": "youtube-plugin",
-      "port": 3001
+      "id": "youtube",
+      "name": "YouTube",
+      "version": "1.0.0",
+      "description": "YouTube content provider for OMG-Roma",
+      "author": "McCoy88f",
+      "language": "javascript",
+      "port": 3001,
+      "url": "http://youtube-plugin:3001",
+      "manifestEnabled": true,
+      "config": {
+        "id": "youtube",
+        "name": "YouTube",
+        "version": "1.0.0",
+        "description": "YouTube content provider for OMG-Roma",
+        "author": "McCoy88f",
+        "language": "javascript",
+        "port": 3001,
+        "endpoints": {
+          "search": "/search",
+          "discover": "/discover",
+          "meta": "/meta",
+          "stream": "/stream",
+          "config": "/config",
+          "streaming_search": "/streaming/search",
+          "streaming_info": "/streaming/info",
+          "streaming_formats": "/streaming/formats",
+          "streaming_channel": "/streaming/channel",
+          "config/schema": "/config/schema",
+          "test": "/test"
+        },
+        "stremio": {
+          "search_catalog_name": "Ricerca YouTube",
+          "search_catalog_id": "youtube_search",
+          "discover_catalog_name": "YouTube Discover",
+          "discover_catalog_id": "youtube_channels"
+        },
+        "extra": [
+          {
+            "name": "filter",
+            "options": ["all"],
+            "default": "all",
+            "description": "Filter videos by specific channel"
+          }
+        ],
+        "config_schema": {
+          "api_key": {
+            "type": "string",
+            "required": false,
+            "description": "YouTube Data API v3 Key (optional, fallback to yt-dlp search)",
+            "default": ""
+          },
+          "search_mode": {
+            "type": "string",
+            "enum": ["api", "ytdlp", "hybrid"],
+            "default": "hybrid",
+            "description": "Search mode: api (fast with quota), ytdlp (free but slow), hybrid (auto fallback)"
+          },
+          "followed_channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of YouTube channel URLs to follow in Discover section",
+            "default": []
+          },
+          "video_limit": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 50,
+            "default": 20,
+            "description": "Number of videos to fetch per request"
+          },
+          "adult_content": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow adult/mature content in results"
+          }
+        },
+        "dependencies": {
+          "system": ["yt-dlp", "ffmpeg"],
+          "language": {
+            "npm": [
+              "express",
+              "axios", 
+              "googleapis",
+              "child_process",
+              "fs-extra"
+            ]
+          }
+        },
+        "health_check": {
+          "endpoint": "/health",
+          "interval": 30,
+          "timeout": 10
+        },
+        "features": {
+          "search": true,
+          "discover": true,
+          "streaming": true,
+          "metadata": true,
+          "thumbnails": true,
+          "hls_support": true,
+          "mp4_support": true
+        },
+        "content_types": {
+          "music": true,
+          "entertainment": true,
+          "education": true,
+          "news": true,
+          "sports": true,
+          "gaming": true,
+          "adult": false
+        }
+      }
     }
   },
-  "last_updated": "2024-01-01T00:00:00.000Z"
+  "gateway": {
+    "port": 3100,
+    "plugins_dir": "/app/plugins",
+    "config_dir": "/app/config",
+    "health_check_interval": 30,
+    "plugin_discovery_interval": 60,
+    "max_plugin_retries": 3,
+    "plugin_retry_delay": 5000
+  }
 }

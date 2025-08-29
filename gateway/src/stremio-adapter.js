@@ -249,6 +249,56 @@ class StremioAdapter {
     }
   }
 
+  async handleMetaRequest(id) {
+    try {
+      // Estrae pluginId e videoId dal formato pluginId:videoId
+      const [pluginId, videoId] = id.split(':', 2);
+      
+      if (!pluginId || !videoId) {
+        throw new Error(`Invalid video ID format: ${id}`);
+      }
+      
+      console.log(`🔍 Meta request for ${pluginId}:${videoId}`);
+      
+      // Chiama il plugin per ottenere i meta
+      const result = await this.pluginManager.callPlugin(pluginId, 'meta', { videoId });
+      
+      // Converte i meta nel formato Stremio
+      return { meta: this.convertToStremioMeta(result.video, pluginId) };
+      
+    } catch (error) {
+      console.error(`❌ Meta request error:`, error.message);
+      // Fallback: genera meta di base
+      return { meta: this.generateFallbackMeta(id) };
+    }
+  }
+
+  async handleStreamRequest(id) {
+    try {
+      // Estrae pluginId e videoId dal formato pluginId:videoId
+      const [pluginId, videoId] = id.split(':', 2);
+      
+      if (!pluginId || !videoId) {
+        throw new Error(`Invalid video ID format: ${id}`);
+      }
+      
+      console.log(`🎬 Stream request for ${pluginId}:${videoId}`);
+      
+      // Chiama il plugin per ottenere gli stream
+      const result = await this.pluginManager.callPlugin(pluginId, 'stream', { videoId });
+      
+      // Converte gli stream nel formato Stremio
+      const streams = result.streams.map(stream => this.convertToStremioStream(stream));
+      
+      return { streams };
+      
+    } catch (error) {
+      console.error(`❌ Stream request error:`, error.message);
+      // Fallback: genera stream di base
+      return { streams: this.generateFallbackStreams(id) };
+    }
+  }
+
   async handleCatalogRequest(catalogId, extraParams) {
     try {
       const pluginId = this.pluginManager.getPluginByCatalogId(catalogId);
@@ -378,17 +428,24 @@ class StremioAdapter {
       type: "channel",
       name: video.title || "Unknown Title",
       poster: video.thumbnail || "",
+      posterShape: "landscape",
       background: video.thumbnail || "",
+      logo: video.channelThumbnail || video.thumbnail || "",
       description: video.description || "",
       
       // Additional metadata
-      genres: video.genres || [],
-      director: video.channel || [],
-      cast: [],
+      genre: video.genres || [pluginId],
+      director: video.channel || video.channelTitle || pluginId,
+      cast: video.channel ? [video.channel] : [pluginId],
+      country: video.country || "Unknown",
+      language: video.language || "en",
+      subtitles: video.subtitles || [],
       
       // Video specific info
       runtime: video.duration || "",
-      year: video.publishedAt ? new Date(video.publishedAt).getFullYear() : "",
+      releaseInfo: video.duration || pluginId,
+      year: video.publishedAt ? new Date(video.publishedAt).getFullYear() : new Date().getFullYear(),
+      released: video.publishedAt || new Date().toISOString().split('T')[0],
       
       // Ratings and metrics
       rating: video.rating || 0,
@@ -396,6 +453,13 @@ class StremioAdapter {
       
       // Links and references
       website: video.url || "",
+      links: [
+        {
+          name: pluginId,
+          category: "watch",
+          url: video.url || `https://${pluginId}.com/watch?v=${video.id}`
+        }
+      ],
       
       // Adult content flag
       adult: video.adult || false
@@ -403,11 +467,11 @@ class StremioAdapter {
 
     // Add plugin-specific metadata
     if (video.channel) {
-      meta.director = [video.channel];
+      meta.director = video.channel;
     }
     
     if (video.tags && Array.isArray(video.tags)) {
-      meta.genres = video.tags.slice(0, 5); // Limit to 5 genres
+      meta.genre = video.tags.slice(0, 5); // Limit to 5 genres
     }
 
     return meta;
@@ -421,6 +485,7 @@ class StremioAdapter {
       
       // Quality and format info
       quality: stream.quality || "",
+      format: stream.format || "mp4",
       
       // Behavioral hints
       behaviorHints: {
@@ -435,12 +500,64 @@ class StremioAdapter {
       stremioStream.name = `${stremioStream.name} - ${stream.quality}`;
     }
 
-    // Add format indicator
+    // Add format indicator if available
     if (stream.format) {
-      stremioStream.name = `${stremioStream.name} (${stream.format})`;
+      stremioStream.name = `${stremioStream.name} (${stream.format.toUpperCase()})`;
     }
 
     return stremioStream;
+  }
+
+  generateFallbackMeta(id) {
+    const [pluginId, videoId] = id.split(':', 2);
+    return {
+      id: id,
+      type: "channel",
+      name: `Video ${videoId}`,
+      poster: "",
+      posterShape: "landscape",
+      background: "",
+      logo: "",
+      description: `Video from ${pluginId}`,
+      genre: [pluginId],
+      director: pluginId,
+      cast: [pluginId],
+      country: "Unknown",
+      language: "en",
+      subtitles: [],
+      runtime: "",
+      releaseInfo: pluginId,
+      year: new Date().getFullYear(),
+      released: new Date().toISOString().split('T')[0],
+      rating: 0,
+      imdbRating: 0,
+      website: "",
+      links: [
+        {
+          name: pluginId,
+          category: "watch",
+          url: `https://${pluginId}.com/watch?v=${videoId}`
+        }
+      ],
+      adult: false
+    };
+  }
+
+  generateFallbackStreams(id) {
+    const [pluginId, videoId] = id.split(':', 2);
+    return [
+      {
+        name: `Stream ${videoId} - Best Quality`,
+        title: `Best Quality Stream`,
+        url: `http://localhost:3100/proxy-best/channel/${id}`,
+        quality: "best",
+        format: "mp4",
+        behaviorHints: {
+          bingeGroup: "default",
+          notWebReady: false
+        }
+      }
+    ];
   }
 }
 
